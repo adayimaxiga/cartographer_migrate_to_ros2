@@ -25,15 +25,16 @@
 #include "cartographer/io/submap_painter.h"
 #include "cartographer/mapping/id.h"
 #include "cartographer/transform/rigid_transform.h"
-#include "ros/ros.h"
-
+#include <rclcpp/rclcpp.hpp>
+#include "cartographer_ros_msgs/srv/submap_query.hpp"
 namespace cartographer_ros {
 
 // Fetch 'submap_id' using the 'client' and returning the response or 'nullptr'
 // on error.
 std::unique_ptr<::cartographer::io::SubmapTextures> FetchSubmapTextures(
     const ::cartographer::mapping::SubmapId& submap_id,
-    ros::ServiceClient* client);
+    ::rclcpp::Client<::cartographer_ros_msgs::srv::SubmapQuery>::SharedPtr client,
+    ::rclcpp::Node::SharedPtr node);
 
 bool Has2DGrid(const ::cartographer::mapping::proto::Submap& submap);
 bool Has3DGrids(const ::cartographer::mapping::proto::Submap& submap);

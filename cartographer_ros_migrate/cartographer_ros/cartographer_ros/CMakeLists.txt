@@ -18,7 +18,26 @@ add_executable(cartographer_node node_main.cc)
 target_include_directories(cartographer_node SYSTEM PUBLIC ${LUA_INCLUDE_DIR})
 target_link_libraries(cartographer_node ${PROJECT_NAME})
 
+add_executable(cartographer_occupancy_grid_node occupancy_grid_node_main.cc)
+target_include_directories(cartographer_occupancy_grid_node SYSTEM PUBLIC ${LUA_INCLUDE_DIR})
+target_link_libraries(cartographer_occupancy_grid_node ${PROJECT_NAME})
+
+
 ament_target_dependencies(cartographer_node
+  "cartographer_ros_msgs"
+  "geometry_msgs"
+  "nav_msgs"
+  "pcl_conversions"
+  "rclcpp"
+  "std_msgs"
+  "sensor_msgs"
+  "tf2"
+  "tf2_msgs"
+  "tf2_ros"
+  "visualization_msgs"
+)
+
+ament_target_dependencies(cartographer_occupancy_grid_node
   "cartographer_ros_msgs"
   "geometry_msgs"
   "nav_msgs"
@@ -36,7 +55,9 @@ install(TARGETS
   cartographer_node
   DESTINATION lib/${PROJECT_NAME})
 
-
+install(TARGETS
+  cartographer_occupancy_grid_node
+  DESTINATION lib/${PROJECT_NAME})
 
 #google_binary(cartographer_assets_writer
 #  SRCS

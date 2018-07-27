@@ -34,7 +34,7 @@
 #include "cartographer_ros_msgs/msg/submap_list.hpp"
 #include "cartographer_ros_msgs/srv/submap_query.hpp"
 #include "gflags/gflags.h"
-#include "nav_msgs/msg/occupancy_grid.h"
+#include "nav_msgs/msg/occupancy_grid.hpp"
 
 #include <rclcpp/clock.hpp>
 #include <rclcpp/rclcpp.hpp>

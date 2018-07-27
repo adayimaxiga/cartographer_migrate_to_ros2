@@ -59,6 +59,28 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/time.hpp>
 #include <rclcpp/time_source.hpp>
+
+
+
+
+
+
+
+#include "gflags/gflags.h"
+
+DEFINE_double(resolution, 0.05,
+              "Resolution of a grid cell in the published occupancy grid.");
+DEFINE_double(publish_period_sec, 1.0, "OccupancyGrid publishing period.");
+DEFINE_bool(include_frozen_submaps, true,
+            "Include frozen submaps in the occupancy grid.");
+DEFINE_bool(include_unfrozen_submaps, true,
+            "Include unfrozen submaps in the occupancy grid.");
+DEFINE_string(occupancy_grid_topic, cartographer_ros::kOccupancyGridTopic,
+              "Name of the topic on which the occupancy grid is published.");
+
+
+
+
 namespace cartographer_ros {
 
 namespace {
@@ -105,6 +127,7 @@ Node::Node(
     std::unique_ptr<cartographer::mapping::MapBuilderInterface> map_builder,
     tf2_ros::Buffer* const tf_buffer, const bool collect_metrics)
     : node_options_(node_options),
+      resolution_(FLAGS_resolution),
       map_builder_bridge_(node_options_, std::move(map_builder), tf_buffer) {
   carto::common::MutexLocker lock(&mutex_);
   if (collect_metrics) {
@@ -171,6 +194,10 @@ Node::Node(
   //    kGetTrajectoryStatesServiceName, &Node::HandleGetTrajectoryStates, this));
   //service_servers_.push_back(node_handle_.advertiseService(
   //    kReadMetricsServiceName, &Node::HandleReadMetrics, this));
+  occupancy_grid_publisher_ =
+      node_handle_->create_publisher<::nav_msgs::msg::OccupancyGrid>(
+  kOccupancyGridTopic, custom_qos_profile);
+
 
   scan_matched_point_cloud_publisher_ =
       node_handle_->create_publisher<sensor_msgs::msg::PointCloud2>(
@@ -220,6 +247,14 @@ Node::Node(
   //    ::ros::WallDuration(kConstraintPublishPeriodSec),
   //    &Node::PublishConstraintList, this));
 
+  wall_timers_.push_back(node_handle_->create_wall_timer(
+    std::chrono::milliseconds(int(1 * 1000)),
+    std::bind(&Node::DrawAndPublish, this)));
+  
+
+
+
+
   ts_ = std::make_shared<rclcpp::TimeSource>(node_handle_);
   clock_ = std::make_shared<rclcpp::Clock>(RCL_ROS_TIME);
   ts_->attachClock(clock_);
@@ -239,7 +274,100 @@ void Node::HandleSubmapQuery(
 
 void Node::PublishSubmapList() {
   carto::common::MutexLocker lock(&mutex_);
-  submap_list_publisher_->publish(map_builder_bridge_.GetSubmapList(clock_));
+  
+  LOG(INFO)<< "Submap receive";
+  cartographer_ros_msgs::msg::SubmapList msg=map_builder_bridge_.GetSubmapList(clock_);
+  
+  submap_list_publisher_->publish(msg);
+
+  std::set<SubmapId> submap_ids_to_delete;
+
+  for (const auto& pair : submap_slices_) {
+    submap_ids_to_delete.insert(pair.first);
+  }
+
+  for (const auto& submap_msg : msg.submap) {
+    const SubmapId id{submap_msg.trajectory_id, submap_msg.submap_index};
+    submap_ids_to_delete.erase(id);
+    if ((submap_msg.is_frozen && !FLAGS_include_frozen_submaps) ||
+        (!submap_msg.is_frozen && !FLAGS_include_unfrozen_submaps)) {
+      continue;
+    }
+    SubmapSlice& submap_slice = submap_slices_[id];
+    submap_slice.pose = ToRigid3d(submap_msg.pose);
+    submap_slice.metadata_version = submap_msg.submap_version;
+    if (submap_slice.surface != nullptr &&
+        submap_slice.version == submap_msg.submap_version) {
+      continue;
+    }
+
+    auto request = std::make_shared<::cartographer_ros_msgs::srv::SubmapQuery::Request>();
+    request -> trajectory_id = id.trajectory_id;
+    request -> submap_index = id.submap_index;
+
+    auto result = std::make_shared<::cartographer_ros_msgs::srv::SubmapQuery::Response>();
+    map_builder_bridge_.HandleSubmapQuery(request, result);
+
+    if (result.get()->textures.empty()) {
+    return ;
+    }
+
+    auto response =
+      ::cartographer::common::make_unique<::cartographer::io::SubmapTextures>();
+    response->version = result.get()->submap_version;
+    for (const auto& texture : result.get()->textures) {
+      const std::string compressed_cells(texture.cells.begin(),
+                                        texture.cells.end());
+     response->textures.emplace_back(::cartographer::io::SubmapTexture{
+          ::cartographer::io::UnpackTextureData(compressed_cells, texture.width,
+                                               texture.height),
+          texture.width, texture.height, texture.resolution,
+          ToRigid3d(texture.slice_pose)});
+    }
+
+    if (response == nullptr) {
+      continue;
+    }
+    CHECK(!response->textures.empty());
+    submap_slice.version = response->version;
+
+    // We use the first texture only. By convention this is the highest
+    // resolution texture and that is the one we want to use to construct the
+    // map for ROS.
+    const auto fetched_texture = response->textures.begin();
+    submap_slice.width = fetched_texture->width;
+    submap_slice.height = fetched_texture->height;
+    submap_slice.slice_pose = fetched_texture->slice_pose;
+    submap_slice.resolution = fetched_texture->resolution;
+    submap_slice.cairo_data.clear();
+    submap_slice.surface = ::cartographer::io::DrawTexture(
+        fetched_texture->pixels.intensity, fetched_texture->pixels.alpha,
+        fetched_texture->width, fetched_texture->height,
+        &submap_slice.cairo_data);
+  }
+
+  for (const auto& id : submap_ids_to_delete) {
+    submap_slices_.erase(id);
+  }
+
+  last_timestamp_ = msg.header.stamp;
+  last_frame_id_ = msg.header.frame_id;
+
+
+
+}
+
+void Node::DrawAndPublish() {
+//  LOG(INFO)<< "occu_timer";
+  if (submap_slices_.empty() || last_frame_id_.empty()) {
+    return;
+  }
+  LOG(INFO)<< "Occupied grid map Publish";
+  ::cartographer::common::MutexLocker locker(&mutex_);
+  auto painted_slices = PaintSubmapSlices(submap_slices_, resolution_);
+  std::unique_ptr<nav_msgs::msg::OccupancyGrid> msg_ptr = CreateOccupancyGridMsg(
+      painted_slices, resolution_, last_frame_id_, last_timestamp_);
+  occupancy_grid_publisher_->publish(*msg_ptr);
 }
 
 void Node::AddExtrapolator(const int trajectory_id,

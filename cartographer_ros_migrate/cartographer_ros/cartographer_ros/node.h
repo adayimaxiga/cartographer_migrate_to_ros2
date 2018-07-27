@@ -61,12 +61,18 @@
 //#include "sensor_msgs/MultiEchoLaserScan.h"
 //#include "sensor_msgs/NavSatFix.h"
 //#include "sensor_msgs/PointCloud2.h"
-
+#include "cartographer/io/image.h"
+#include "cartographer/io/submap_painter.h"
+#include "cartographer/mapping/id.h"
 
 
 #include "tf2_ros/transform_broadcaster.h"
 
 namespace cartographer_ros {
+
+using ::cartographer::io::PaintSubmapSlicesResult;
+using ::cartographer::io::SubmapSlice;
+using ::cartographer::mapping::SubmapId;
 
 // Wires up ROS topics to SLAM.
 class Node {
@@ -174,6 +180,7 @@ class Node {
                          const cartographer_ros_msgs::msg::SensorTopics& topics,
                          int trajectory_id);
   void PublishSubmapList();
+  void DrawAndPublish();
   void AddExtrapolator(int trajectory_id, const TrajectoryOptions& options);
   void AddSensorSamplers(int trajectory_id, const TrajectoryOptions& options);
   void PublishLocalTrajectoryData();
@@ -188,6 +195,7 @@ class Node {
   //void MaybeWarnAboutTopicMismatch();
 
   const NodeOptions node_options_;
+  double resolution_;
 
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   //tf2_ros::TransformBroadcaster tf_broadcaster_;
@@ -204,6 +212,10 @@ class Node {
   ::rclcpp::Publisher<::visualization_msgs::msg::MarkerArray>::SharedPtr landmark_poses_list_publisher_;
   //::ros::Publisher landmark_poses_list_publisher_;
   ::rclcpp::Publisher<::visualization_msgs::msg::MarkerArray>::SharedPtr constraint_list_publisher_;
+
+  ::rclcpp::Publisher<::nav_msgs::msg::OccupancyGrid>::SharedPtr occupancy_grid_publisher_;
+
+  
   //::ros::Publisher constraint_list_publisher_;
   // These ros::ServiceServers need to live for the lifetime of the node.
   std::vector<::rclcpp::ServiceBase::SharedPtr> service_servers_;
@@ -252,6 +264,11 @@ class Node {
   
   std::shared_ptr<rclcpp::TimeSource> ts_;
   rclcpp::Clock::SharedPtr clock_;
+
+  std::map<SubmapId, SubmapSlice> submap_slices_ GUARDED_BY(mutex_);
+  
+  std::string last_frame_id_;
+  builtin_interfaces::msg::Time last_timestamp_;
 };
 
 }  // namespace cartographer_ros

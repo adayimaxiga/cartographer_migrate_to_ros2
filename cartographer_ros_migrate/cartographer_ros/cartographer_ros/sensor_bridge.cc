@@ -65,10 +65,10 @@ void SensorBridge::HandleOdometryMessage(
     const std::string& sensor_id, const nav_msgs::msg::Odometry::ConstSharedPtr& msg) {
   
   //----my_log-----
-  LOG(INFO)<< "received odometry data"<< msg->pose.pose.position.x<<","<<msg->pose.pose.position.y<<","<<msg->pose.pose.position.z<<","<<msg->pose.pose.orientation.x<<","<<msg->pose.pose.orientation.y<<","<<msg->pose.pose.orientation.z<<","<<msg->pose.pose.orientation.w;
+  //LOG(INFO)<< "received odometry data"<< msg->pose.pose.position.x<<","<<msg->pose.pose.position.y<<","<<msg->pose.pose.position.z<<","<<msg->pose.pose.orientation.x<<","<<msg->pose.pose.orientation.y<<","<<msg->pose.pose.orientation.z<<","<<msg->pose.pose.orientation.w;
   std::unique_ptr<carto::sensor::OdometryData> odometry_data =
       ToOdometryData(msg);
-  LOG(INFO)<< "change data to cart"<< odometry_data->pose.DebugString();
+  //LOG(INFO)<< "change data to cart"<< odometry_data->pose.DebugString();
 
   if (odometry_data != nullptr) {
     trajectory_builder_->AddSensorData(

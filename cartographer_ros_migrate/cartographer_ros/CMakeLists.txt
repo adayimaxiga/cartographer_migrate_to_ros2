@@ -88,7 +88,6 @@ set(ALL_SRCS
   "cartographer_ros/ros_log_sink.cc"
   "cartographer_ros/sensor_bridge.cc"
   "cartographer_ros/tf_bridge.cc"
-  "cartographer_ros/submap.cc"
   "cartographer_ros/time_conversion.cc"
   "cartographer_ros/trajectory_options.cc"
   "cartographer_ros/metrics/family_factory.cc"

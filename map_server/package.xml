@@ -1,0 +1,44 @@
+<package format="2">
+    <name>map_server</name>
+    <version>3.1.0</version>
+    <description>
+        map_server provides the <tt>map_server</tt> ROS <a href="http://www.ros.org/wiki/Nodes">Node</a>, which offers map data as a ROS <a href="http://www.ros.org/wiki/Services">Service</a>. It also provides the <tt>map_saver</tt> command-line utility, which allows dynamically generated maps to be saved to file.
+    </description>
+    <author>Brian Gerkey</author>
+    <author>Tony Pratkanis</author>
+    <author>contradict@gmail.com</author>
+    <author email="davidvlu@gmail.com">David V. Lu!!</author>
+    <author email="mferguson@fetchrobotics.com">Michael Ferguson</author>
+    <maintainer email="william@osrfoundation.org">William Woodall</maintainer>
+    <url>http://wiki.ros.org/map_server</url>
+    <license>BSD</license>
+
+    <buildtool_depend>ament_cmake</buildtool_depend>
+
+    <build_depend>geometry_msgs</build_depend>
+    <build_depend>nav_msgs</build_depend>
+    <build_depend>rclcpp</build_depend>
+    <build_depend>rcutils</build_depend>
+    <build_depend>sdl</build_depend>
+    <build_depend>sdl-image</build_depend>
+    <build_depend>tf2</build_depend>
+    <build_depend>yaml-cpp</build_depend>
+
+    <build_export_depend>nav_msgs</build_export_depend>
+
+    <exec_depend>rclcpp</exec_depend>
+    <exec_depend>rcutils</exec_depend>
+    <exec_depend>sdl</exec_depend>
+    <exec_depend>sdl-image</exec_depend>
+    <exec_depend>tf2</exec_depend>
+    <exec_depend>yaml-cpp</exec_depend>
+
+    <test_depend>ament_cmake_gtest</test_depend>
+    <test_depend>ament_cmake_pytest</test_depend>
+    <test_depend>launch_testing</test_depend>
+    <test_depend>rclpy</test_depend>
+
+    <export>
+        <build_type>ament_cmake</build_type>
+    </export>
+</package>

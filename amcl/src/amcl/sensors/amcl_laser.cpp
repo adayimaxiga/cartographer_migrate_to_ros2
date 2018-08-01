@@ -225,7 +225,7 @@ double AMCLLaser::LikelihoodFieldModel(AMCLLaserData *data, pf_sample_set_t* set
   self = (AMCLLaser*) data->sensor;
 
   total_weight = 0.0;
-
+  //对粒子循环
   // Compute the sample weights
   for (j = 0; j < set->sample_count; j++)
   {

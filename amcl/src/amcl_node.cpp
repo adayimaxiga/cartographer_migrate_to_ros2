@@ -179,6 +179,7 @@ class AmclNode
                         std::shared_ptr<nav_msgs::srv::SetMap::Response> res);
 
     void laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser_scan);
+    void laserReceived_2(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser_scan_2);
     void initialPoseReceived(const std::shared_ptr<geometry_msgs::msg::PoseWithCovarianceStamped> msg);
     void handleInitialPoseMessage(const geometry_msgs::msg::PoseWithCovarianceStamped& msg);
     void mapReceived(const std::shared_ptr<nav_msgs::msg::OccupancyGrid> msg);
@@ -224,8 +225,12 @@ class AmclNode
     std::vector< AMCLLaser* > lasers_;
     std::vector< bool > lasers_update_;
 
+    std::vector< AMCLLaser* > lasers_2;
+    std::vector< bool > lasers_update_2;
+
     //std::map类似python中dictionary类，第一个为索引，第二个为内容
     std::map< std::string, int > frame_to_laser_;
+    std::map< std::string, int > frame_to_laser_2;
 
     // Particle filter
     pf_t *pf_;
@@ -299,6 +304,7 @@ class AmclNode
     // void reconfigureCB(amcl::AMCLConfig &config, uint32_t level);
 
     tf2::TimePoint last_laser_received_ts_;
+    tf2::TimePoint last_laser_received_ts_2;
     tf2::Duration laser_check_interval_;
     void checkLaserReceived();
 
@@ -398,7 +404,7 @@ AmclNode::AmclNode(std::shared_ptr<rclcpp::Node> node_, bool use_map_topic) :
   timesource.attachClock(clock);
 
   last_laser_received_ts_ = tf2_ros::fromMsg(clock->now());
-
+  last_laser_received_ts_2 = tf2_ros::fromMsg(clock->now());
   // Grab params off the param server
 
   // TODO(dhood): restore this paramter in place of command line option
@@ -925,6 +931,137 @@ AmclNode::setMapCallback(const std::shared_ptr<nav_msgs::srv::SetMap::Request> r
   handleInitialPoseMessage(req->initial_pose);
   res->success = true;
 }
+//接收另一个scan topic
+void
+AmclNode::laserReceived_2(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser_scan_2) {
+    last_laser_received_ts_2 =  tf2_ros::fromMsg(clock->now());
+    if( map_ == NULL ) {
+        return;
+    }
+    //mutex
+    std::lock_guard<std::recursive_mutex> lr2(configuration_mutex_);
+    int laser_index = -1;
+
+    std::string laser_scan_frame_id = laser_scan_2->header.frame_id;
+
+    if(frame_to_laser_2.find(laser_scan_frame_id) == frame_to_laser_2.end())
+    {
+        ROS_DEBUG("Setting up laser_2 %d (frame_id=%s)", (int)frame_to_laser_2.size(), laser_scan_frame_id.c_str());
+        lasers_2.push_back(new AMCLLaser( *lasers_2 ));
+        lasers_update_2.push_back(true);
+        laser_index = frame_to_laser_2.size();
+
+        tf2::Stamped<tf2::Transform> ident (tf2::Transform(tf2::Quaternion::getIdentity(),
+                                                           tf2::Vector3(0,0,0)),
+                                            tf2::TimePoint(), laser_scan_frame_id);
+        tf2::Stamped<tf2::Transform> laser_pose;
+        try
+        {
+            geometry_msgs::msg::TransformStamped laser_pose_msg;
+            this->tf2_buffer_->transform(tf2::toMsg<tf2::Stamped<tf2::Transform>, geometry_msgs::msg::TransformStamped>(ident), laser_pose_msg, base_frame_id_, tf2::durationFromSec(3.0));
+            tf2::fromMsg(laser_pose_msg, laser_pose);
+        }
+        catch(tf2::TransformException& e)
+        {
+            ROS_ERROR("Couldn't transform from %s to %s, "
+                      "even though the message notifier is in use",
+                      laser_scan_frame_id.c_str(),
+                      base_frame_id_.c_str());
+            return;
+        }
+        pf_vector_t laser_pose_v;
+        laser_pose_v.v[0] = laser_pose.getOrigin().x();
+        laser_pose_v.v[1] = laser_pose.getOrigin().y();
+        // laser mounting angle gets computed later -> set to 0 here!
+        laser_pose_v.v[2] = 0;
+        //获取到激光相对baselink的坐标
+        lasers_2[laser_index]->SetLaserPose(laser_pose_v);
+        //lasers存储本激光雷达各种信息。但是没有数据。
+        ROS_DEBUG("Received laser's pose wrt robot: %.3f %.3f %.3f",
+                  laser_pose_v.v[0],
+                  laser_pose_v.v[1],
+                  laser_pose_v.v[2]);
+
+        frame_to_laser_2[laser_scan_frame_id] = laser_index;     //添加laser的tf以及激光雷达的标号
+
+    }else {
+        // we have the laser pose, retrieve laser index
+        laser_index = frame_to_laser_2[laser_scan_frame_id];     //如果不是第一次出现该雷达，找出雷达目录
+    }
+    //接下来不做区分，将所有laser数据备份
+
+    AMCLLaserData ldata;
+    ldata.sensor = lasers_[laser_index];
+    ldata.range_count = laser_scan_2->ranges.size();
+    //这里把扫描点数目给存了下来。
+    // To account for lasers that are mounted upside-down, we determine the
+    // min, max, and increment angles of the laser in the base frame.
+    //
+    // Construct min and max angles of laser, in the base_link frame.
+    //设定角度最小值及增量
+    tf2::Quaternion q;
+    q.setRPY(0.0, 0.0, laser_scan_2->angle_min);
+    tf2::Stamped<tf2::Quaternion> min_q(q, tf2::TimePoint(),
+                                        laser_scan_frame_id);
+    q.setRPY(0.0, 0.0, laser_scan_2->angle_min + laser_scan_2->angle_increment);
+    tf2::Stamped<tf2::Quaternion> inc_q(q, tf2::TimePoint(),
+                                        laser_scan_frame_id);
+    try
+    {
+        //转换到世界坐标系
+        geometry_msgs::msg::QuaternionStamped min_q_msg, inc_q_msg;
+        tf2_buffer_->transform(tf2::toMsg<tf2::Stamped<tf2::Quaternion>, geometry_msgs::msg::QuaternionStamped>(min_q), min_q_msg, base_frame_id_, tf2::durationFromSec(3.0));
+        tf2_buffer_->transform(tf2::toMsg<tf2::Stamped<tf2::Quaternion>, geometry_msgs::msg::QuaternionStamped>(inc_q), inc_q_msg, base_frame_id_, tf2::durationFromSec(3.0));
+        tf2::fromMsg(min_q_msg, min_q);
+        tf2::fromMsg(inc_q_msg, inc_q);
+    }
+    catch(tf2::TransformException& e)
+    {
+        ROS_WARN("Unable to transform min/max laser angles into base frame: %s",
+                 e.what());
+        return;
+    }
+
+    double angle_min = tf2::getYaw(min_q);
+    double angle_increment = tf2::getYaw(inc_q) - angle_min;
+
+    // wrapping angle to [-pi .. pi]
+    //把angle_increment转换到[-pi .. pi]区间。
+    angle_increment = fmod(angle_increment + 5*M_PI, 2*M_PI) - M_PI;
+
+    ROS_DEBUG("Laser %d angles in base frame: min: %.3f inc: %.3f", laser_index, angle_min, angle_increment);
+
+    // Apply range min/max thresholds, if the user supplied them
+    //看这个有没有预先设定
+    if(laser_max_range_ > 0.0)
+        ldata.range_max = std::min(laser_scan_2->range_max, (float)laser_max_range_);
+    else
+        ldata.range_max = laser_scan_2->range_max;
+    double range_min;
+    if(laser_min_range_ > 0.0)
+        range_min = std::max(laser_scan_2->range_min, (float)laser_min_range_);
+    else
+        range_min = laser_scan_2->range_min;
+    // The AMCLLaserData destructor will free this memory
+    ldata.ranges = new double[ldata.range_count][2];
+    // ROS_ASSERT(ldata.ranges);
+    for(int i=0;i<ldata.range_count;i++)
+    {
+        //amcl无法处理最小值问题，因此转化为最大值
+        // amcl doesn't (yet) have a concept of min range.  So we'll map short
+        // readings to max range.
+        if(laser_scan_2->ranges[i] <= range_min)
+            ldata.ranges[i][0] = ldata.range_max;
+        else
+            ldata.ranges[i][0] = laser_scan_2->ranges[i];
+        // Compute bearing
+        ldata.ranges[i][1] = angle_min +
+                             (i * angle_increment);
+    }
+
+
+}
+
 //这里是激光数据处理，要将双激光雷达加进去，最核心是要把
 void
 AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser_scan)
@@ -939,8 +1076,10 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
   // Do we have the base->base_laser Tx yet?
   //copy laser frame
   std::string laser_scan_frame_id = laser_scan->header.frame_id;
-  if(frame_to_laser_.find(requestMap) == frame_to_laser_.end())
+  if(frame_to_laser_.find(laser_scan_frame_id) == frame_to_laser_.end())
+  //没有找到这次laser的tf，即比如两个雷达，就都把他收进来了，所以我不用改了？
   {
+      //当前有多少tf（激光雷达）。
     ROS_DEBUG("Setting up laser %d (frame_id=%s)", (int)frame_to_laser_.size(), laser_scan_frame_id.c_str());
     lasers_.push_back(new AMCLLaser(*laser_));
     lasers_update_.push_back(true);
@@ -970,18 +1109,22 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
     laser_pose_v.v[1] = laser_pose.getOrigin().y();
     // laser mounting angle gets computed later -> set to 0 here!
     laser_pose_v.v[2] = 0;
+    //获取到激光相对baselink的坐标
     lasers_[laser_index]->SetLaserPose(laser_pose_v);
+    //lasers存储本激光雷达各种信息。但是没有数据。
     ROS_DEBUG("Received laser's pose wrt robot: %.3f %.3f %.3f",
               laser_pose_v.v[0],
               laser_pose_v.v[1],
               laser_pose_v.v[2]);
 
-    frame_to_laser_[laser_scan_frame_id] = laser_index;
+    frame_to_laser_[laser_scan_frame_id] = laser_index;     //添加laser的tf以及激光雷达的标号
   } else {
     // we have the laser pose, retrieve laser index
-    laser_index = frame_to_laser_[laser_scan_frame_id];
+    laser_index = frame_to_laser_[laser_scan_frame_id];     //如果不是第一次出现该雷达，找出雷达目录
   }
 
+
+  //attention  ：  到这里还完全没有用到这次激光雷达的数据。
   // Where was the robot when this scan was taken?
   pf_vector_t pose;
   if(!getOdomPose(latest_odom_pose_, pose.v[0], pose.v[1], pose.v[2],
@@ -990,17 +1133,19 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
     ROS_ERROR("Couldn't determine robot's pose associated with laser scan");
     return;
   }
+  //这里获取了里程计数据
  
   pf_vector_t delta = pf_vector_zero();
+  //这个数据用来记录里程计变化
 
-  if(pf_init_)
+  if(pf_init_)      //如果pf完成初始化，进行运算
   {
     // Compute change in pose
     //delta = pf_vector_coord_sub(pose, pf_odom_pose_);
     delta.v[0] = pose.v[0] - pf_odom_pose_.v[0];
     delta.v[1] = pose.v[1] - pf_odom_pose_.v[1];
     delta.v[2] = angle_diff(pose.v[2], pf_odom_pose_.v[2]);
-
+    //如果里程计变化超过一定的大小才进行更新
     // See if we should update the filter
     bool update = fabs(delta.v[0]) > d_thresh_ ||
                   fabs(delta.v[1]) > d_thresh_ ||
@@ -1012,10 +1157,12 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
     if(update)
       for(unsigned int i=0; i < lasers_update_.size(); i++)
         lasers_update_[i] = true;
+      //所有激光雷达update改成true，下面就要计算了
   }
 
   bool force_publication = false;
   if(!pf_init_)
+  //如果没有初始化，这里进行初始化，
   {
     // Pose at last filter update
     pf_odom_pose_ = pose;
@@ -1032,8 +1179,10 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
     resample_count_ = 0;
   }
   // If the robot has moved, update the filter
+  //这里laser_index就是这次激光雷达数据的tf索引
   else if(pf_init_ && lasers_update_[laser_index])
   {
+  //这里做运动学预测
     //printf("pose\n");
     //pf_vector_fprintf(pose, stdout, "%.3f");
 
@@ -1043,26 +1192,28 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
     // Modify the delta in the action data so the filter gets
     // updated correctly
     odata.delta = delta;
-
+    //这里对每个粒子生成预测模型。
     // Use the action data to update the filter
     odom_->UpdateAction(pf_, (AMCLSensorData*)&odata);
 
     // Pose at last filter update
     //this->pf_odom_pose = pose;
   }
-
+  //重采样 flag
   bool resampled = false;
   // If the robot has moved, update the filter
+  //更新部分
   if(lasers_update_[laser_index])
   {
     AMCLLaserData ldata;
     ldata.sensor = lasers_[laser_index];
     ldata.range_count = laser_scan->ranges.size();
-
+    //这里把扫描点数目给存了下来。
     // To account for lasers that are mounted upside-down, we determine the
     // min, max, and increment angles of the laser in the base frame.
     //
     // Construct min and max angles of laser, in the base_link frame.
+    //设定角度最小值及增量
     tf2::Quaternion q;
     q.setRPY(0.0, 0.0, laser_scan->angle_min);
     tf2::Stamped<tf2::Quaternion> min_q(q, tf2::TimePoint(),
@@ -1072,6 +1223,7 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
                                       laser_scan_frame_id);
     try
     {
+        //转换到世界坐标系
       geometry_msgs::msg::QuaternionStamped min_q_msg, inc_q_msg;
       tf2_buffer_->transform(tf2::toMsg<tf2::Stamped<tf2::Quaternion>, geometry_msgs::msg::QuaternionStamped>(min_q), min_q_msg, base_frame_id_, tf2::durationFromSec(3.0));
       tf2_buffer_->transform(tf2::toMsg<tf2::Stamped<tf2::Quaternion>, geometry_msgs::msg::QuaternionStamped>(inc_q), inc_q_msg, base_frame_id_, tf2::durationFromSec(3.0));
@@ -1089,11 +1241,13 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
     double angle_increment = tf2::getYaw(inc_q) - angle_min;
 
     // wrapping angle to [-pi .. pi]
+    //把angle_increment转换到[-pi .. pi]区间。
     angle_increment = fmod(angle_increment + 5*M_PI, 2*M_PI) - M_PI;
 
     ROS_DEBUG("Laser %d angles in base frame: min: %.3f inc: %.3f", laser_index, angle_min, angle_increment);
 
     // Apply range min/max thresholds, if the user supplied them
+    //看这个有没有预先设定
     if(laser_max_range_ > 0.0)
       ldata.range_max = std::min(laser_scan->range_max, (float)laser_max_range_);
     else
@@ -1108,6 +1262,7 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
     // ROS_ASSERT(ldata.ranges);
     for(int i=0;i<ldata.range_count;i++)
     {
+        //amcl无法处理最小值问题，因此转化为最大值sensor
       // amcl doesn't (yet) have a concept of min range.  So we'll map short
       // readings to max range.
       if(laser_scan->ranges[i] <= range_min)
@@ -1118,7 +1273,7 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
       ldata.ranges[i][1] = angle_min +
               (i * angle_increment);
     }
-
+    //这里将激光数据传入进行更新，改模型就在这里了
     lasers_[laser_index]->UpdateSensor(pf_, (AMCLSensorData*)&ldata);
 
     lasers_update_[laser_index] = false;

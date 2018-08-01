@@ -43,6 +43,7 @@
 // #include "ros/assert.h"
 
 // roscpp
+
 #include "rclcpp/clock.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/time.hpp"
@@ -79,15 +80,21 @@
 // #include "dynamic_reconfigure/server.h"
 // #include "amcl/AMCLConfig.h"
 
-// TODO(dhood): Re-enable rosbag playback
-// Allows AMCL to run from bag file
-/*
-#include <rosbag/bag.h>
-#include <rosbag/view.h>
-#include <boost/foreach.hpp>
-*/
 
 #define NEW_UNIFORM_SAMPLING 1
+
+
+
+/*  阅读源码，注释理解一下
+ *              LD 2018.8.1
+ *  AMCL源码实现的是概率机器人学中自适应蒙特卡洛定位的方法，基础知识主要是要先明白粒子滤波
+ *
+ *  我现在要把他改成双激光雷达的定位算法
+ *
+ *  我的目标是实现在amcl算法中进行双激光雷达的定位，最需要修改的应该是激光雷达观测模型LikelihoodFieldModel这个函数
+ *  修改方法是将两个激光雷达的数据都传入其中进行运算，就当作是一个激光雷达。其他部分要订阅两个激光雷达数据。
+ */
+
 
 using namespace amcl;
 
@@ -126,8 +133,10 @@ angle_diff(double a, double b)
     return(d2);
 }
 
-static const std::string scan_topic_ = "scan";
+static const std::string scan_topic_ = "scan_1";
+static const std::string scan_topic_2 = "scan_2";
 
+//amcl 类
 class AmclNode
 {
   public:
@@ -207,12 +216,15 @@ class AmclNode
     double resolution;
 
     // TODO(dhood): Re-enable message filters
-    // message_filters::Subscriber<sensor_msgs::msg::LaserScan>* laser_scan_sub_;
+    //这里增加一个激光的订阅-----------------change_code
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_scan_sub_;
+    rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_scan_sub_2;
     // tf::MessageFilter<sensor_msgs::msg::LaserScan>* laser_scan_filter_;
     rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initial_pose_sub_;
     std::vector< AMCLLaser* > lasers_;
     std::vector< bool > lasers_update_;
+
+    //std::map类似python中dictionary类，第一个为索引，第二个为内容
     std::map< std::string, int > frame_to_laser_;
 
     // Particle filter
@@ -297,7 +309,7 @@ class AmclNode
 std::vector<std::pair<int,int> > AmclNode::free_space_indices;
 
 #define USAGE "USAGE: amcl"
-
+//智能指针
 std::shared_ptr<AmclNode> amcl_node_ptr;
 
 // TODO(dhood): Re-enable signal handler when global parameter server in use
@@ -309,7 +321,7 @@ void sigintHandler(int sig)
   rclcpp::shutdown();
 }
 */
-
+//打印用法
 void print_usage()
 {
   printf("Usage for amcl:\n");
@@ -318,7 +330,7 @@ void print_usage()
   printf("-h : Print this help function.\n");
   printf("--use-map-topic: listen for the map on a topic instead of making a service call.\n");
 }
-
+//主函数入口
 int
 main(int argc, char** argv)
 {
@@ -344,7 +356,7 @@ main(int argc, char** argv)
   // signal(SIGINT, sigintHandler);
 
   // Make our node available to sigintHandler
-  amcl_node_ptr.reset(new AmclNode(node, use_map_topic));
+  amcl_node_ptr.reset(new AmclNode(node, use_map_topic));       //这里构造了AMCL类，调用了AMCL构造函数，所有程序入口
 
   rclcpp::spin(node);
   /*
@@ -365,7 +377,7 @@ main(int argc, char** argv)
   // To quote Morgan, Hooray!
   return(0);
 }
-
+//构造函数入口
 AmclNode::AmclNode(std::shared_ptr<rclcpp::Node> node_, bool use_map_topic) :
         sent_first_transform_(false),
         latest_tf_valid_(false),
@@ -391,6 +403,7 @@ AmclNode::AmclNode(std::shared_ptr<rclcpp::Node> node_, bool use_map_topic) :
 
   // TODO(dhood): restore this paramter in place of command line option
   // node->get_parameter_or("use_map_topic", use_map_topic_, false);
+  //参数配置部分
   use_map_topic_ = use_map_topic;
   node->get_parameter_or("first_map_only", first_map_only_, false);
 
@@ -469,19 +482,12 @@ AmclNode::AmclNode(std::shared_ptr<rclcpp::Node> node_, bool use_map_topic) :
   node->get_parameter_or("recovery_alpha_fast", alpha_fast_, 0.1);
   node->get_parameter_or("tf_broadcast", tf_broadcast_, true);
 
-  transform_tolerance_ = tf2::durationFromSec(tmp_tol);
+  transform_tolerance_ = tf2::durationFromSec(tmp_tol); //这里貌似是两个数据容许的最大时间差
 
-  /*
-  {
-    double bag_scan_period;
-    node->get_parameter_or("bag_scan_period", bag_scan_period, -1.0);
-    bag_scan_period_.fromSec(bag_scan_period);
-  }
-  */
-
+//初始化位置
   updatePoseFromServer();
  
-
+//点云发布时间
   cloud_pub_interval = tf2::durationFromSec(1.0);
   tfb_ = new tf2_ros::TransformBroadcaster(node);
   tf2_buffer_ = new tf2_ros::Buffer();
@@ -491,6 +497,7 @@ AmclNode::AmclNode(std::shared_ptr<rclcpp::Node> node_, bool use_map_topic) :
   rmw_qos_profile_t qos = rmw_qos_profile_default;
   qos.depth = 2;
   qos.durability = RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL;
+  //话题订阅与发布
   pose_pub_ = node->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("amcl_pose", qos);
   particlecloud_pub_ = node->create_publisher<geometry_msgs::msg::PoseArray>("particlecloud", qos);
   global_loc_srv_ = node->create_service<std_srvs::srv::Empty>("global_localization",
@@ -500,21 +507,16 @@ AmclNode::AmclNode(std::shared_ptr<rclcpp::Node> node_, bool use_map_topic) :
   set_map_srv_= node->create_service<nav_msgs::srv::SetMap>("set_map",
 					 std::bind(&AmclNode::setMapCallback, this, std::placeholders::_1, std::placeholders::_2));
 
-  // laser_scan_sub_ = new message_filters::Subscriber<sensor_msgs::msg::LaserScan>(nh_, scan_topic_, 100);
   qos = rmw_qos_profile_sensor_data;
   qos.depth = 100;
+  //-------增加一个订阅，话题名改为scan_1,scan_2 ---------  change_code
   laser_scan_sub_ = node->create_subscription<sensor_msgs::msg::LaserScan>(scan_topic_, std::bind(&AmclNode::laserReceived, this, std::placeholders::_1), qos);
-  /*
-  laser_scan_filter_ =
-          new tf::MessageFilter<sensor_msgs::msg::LaserScan>(*laser_scan_sub_,
-                                                        *tf_,
-                                                        odom_frame_id_,
-                                                        100);
-  laser_scan_filter_->registerCallback(std::bind(&AmclNode::laserReceived,
-                                                   this, _1));
- */
+  laser_scan_sub_2 = node->create_subscription<sensor_msgs::msg::LaserScan>(scan_topic_2, std::bind(&AmclNode::laserReceived_2, this, std::placeholders::_1), qos);
+
+
   qos = rmw_qos_profile_default;
   qos.depth = 2;
+  //订阅初始位置
   initial_pose_sub_ = node->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>("initialpose", std::bind(&AmclNode::initialPoseReceived, this, std::placeholders::_1), qos);
 
   if(use_map_topic_) {
@@ -530,254 +532,12 @@ AmclNode::AmclNode(std::shared_ptr<rclcpp::Node> node_, bool use_map_topic) :
   }
   m_force_update = false;
 
-  /*
-  dsrv_ = new dynamic_reconfigure::Server<amcl::AMCLConfig>(ros::NodeHandle("~"));
-  dynamic_reconfigure::Server<amcl::AMCLConfig>::CallbackType cb = std::bind(&AmclNode::reconfigureCB, this, _1, _2);
-  dsrv_->setCallback(cb);
-  */
-
   // 15s timer to warn on lack of receipt of laser scans, #5209
   laser_check_interval_ = std::chrono::seconds(15);
   check_laser_timer_ = node->create_wall_timer(laser_check_interval_,
                                                std::bind(&AmclNode::checkLaserReceived, this));
 }
-
-/*
-void AmclNode::reconfigureCB(AMCLConfig &config, uint32_t level)
-{
-  std::lock_guard<std::recursive_mutex> cfl(configuration_mutex_);
-
-  //we don't want to do anything on the first call
-  //which corresponds to startup
-  if(first_reconfigure_call_)
-  {
-    first_reconfigure_call_ = false;
-    default_config_ = config;
-    return;
-  }
-
-  if(config.restore_defaults) {
-    config = default_config_;
-    //avoid looping
-    config.restore_defaults = false;
-  }
-
-  d_thresh_ = config.update_min_d;
-  a_thresh_ = config.update_min_a;
-
-  resample_interval_ = config.resample_interval;
-
-  laser_min_range_ = config.laser_min_range;
-  laser_max_range_ = config.laser_max_range;
-
-  gui_publish_period = tf2::durationFromSec(1.0/config.gui_publish_rate);
-  save_pose_period = tf2::durationFromSec(1.0/config.save_pose_rate);
-
-  transform_tolerance_.fromSec(config.transform_tolerance);
-
-  max_beams_ = config.laser_max_beams;
-  alpha1_ = config.odom_alpha1;
-  alpha2_ = config.odom_alpha2;
-  alpha3_ = config.odom_alpha3;
-  alpha4_ = config.odom_alpha4;
-  alpha5_ = config.odom_alpha5;
-
-  z_hit_ = config.laser_z_hit;
-  z_short_ = config.laser_z_short;
-  z_max_ = config.laser_z_max;
-  z_rand_ = config.laser_z_rand;
-  sigma_hit_ = config.laser_sigma_hit;
-  lambda_short_ = config.laser_lambda_short;
-  laser_likelihood_max_dist_ = config.laser_likelihood_max_dist;
-
-  if(config.laser_model_type == "beam")
-    laser_model_type_ = LASER_MODEL_BEAM;
-  else if(config.laser_model_type == "likelihood_field")
-    laser_model_type_ = LASER_MODEL_LIKELIHOOD_FIELD;
-  else if(config.laser_model_type == "likelihood_field_prob")
-    laser_model_type_ = LASER_MODEL_LIKELIHOOD_FIELD_PROB;
-
-  if(config.odom_model_type == "diff")
-    odom_model_type_ = ODOM_MODEL_DIFF;
-  else if(config.odom_model_type == "omni")
-    odom_model_type_ = ODOM_MODEL_OMNI;
-  else if(config.odom_model_type == "diff-corrected")
-    odom_model_type_ = ODOM_MODEL_DIFF_CORRECTED;
-  else if(config.odom_model_type == "omni-corrected")
-    odom_model_type_ = ODOM_MODEL_OMNI_CORRECTED;
-
-  if(config.min_particles > config.max_particles)
-  {
-    ROS_WARN("You've set min_particles to be greater than max particles, this isn't allowed so they'll be set to be equal.");
-    config.max_particles = config.min_particles;
-  }
-
-  min_particles_ = config.min_particles;
-  max_particles_ = config.max_particles;
-  alpha_slow_ = config.recovery_alpha_slow;
-  alpha_fast_ = config.recovery_alpha_fast;
-  tf_broadcast_ = config.tf_broadcast;
-
-  do_beamskip_= config.do_beamskip; 
-  beam_skip_distance_ = config.beam_skip_distance; 
-  beam_skip_threshold_ = config.beam_skip_threshold; 
-
-  pf_ = pf_alloc(min_particles_, max_particles_,
-                 alpha_slow_, alpha_fast_,
-                 (pf_init_model_fn_t)AmclNode::uniformPoseGenerator,
-                 (void *)map_);
-  pf_err_ = config.kld_err; 
-  pf_z_ = config.kld_z; 
-  pf_->pop_err = pf_err_;
-  pf_->pop_z = pf_z_;
-
-  // Initialize the filter
-  pf_vector_t pf_init_pose_mean = pf_vector_zero();
-  pf_init_pose_mean.v[0] = last_published_pose.pose.pose.position.x;
-  pf_init_pose_mean.v[1] = last_published_pose.pose.pose.position.y;
-  pf_init_pose_mean.v[2] = tf::getYaw(last_published_pose.pose.pose.orientation);
-  pf_matrix_t pf_init_pose_cov = pf_matrix_zero();
-  pf_init_pose_cov.m[0][0] = last_published_pose.pose.covariance[6*0+0];
-  pf_init_pose_cov.m[1][1] = last_published_pose.pose.covariance[6*1+1];
-  pf_init_pose_cov.m[2][2] = last_published_pose.pose.covariance[6*5+5];
-  pf_init(pf_, pf_init_pose_mean, pf_init_pose_cov);
-  pf_init_ = false;
-
-  // Instantiate the sensor objects
-  // Odometry
-  delete odom_;
-  odom_ = new AMCLOdom();
-  // ROS_ASSERT(odom_);
-  odom_->SetModel( odom_model_type_, alpha1_, alpha2_, alpha3_, alpha4_, alpha5_ );
-  // Laser
-  delete laser_;
-  laser_ = new AMCLLaser(max_beams_, map_);
-  // ROS_ASSERT(laser_);
-  if(laser_model_type_ == LASER_MODEL_BEAM)
-    laser_->SetModelBeam(z_hit_, z_short_, z_max_, z_rand_,
-                         sigma_hit_, lambda_short_, 0.0);
-  else if(laser_model_type_ == LASER_MODEL_LIKELIHOOD_FIELD_PROB){
-    ROS_INFO("Initializing likelihood field model; this can take some time on large maps...");
-    laser_->SetModelLikelihoodFieldProb(z_hit_, z_rand_, sigma_hit_,
-					laser_likelihood_max_dist_, 
-					do_beamskip_, beam_skip_distance_, 
-					beam_skip_threshold_, beam_skip_error_threshold_);
-    ROS_INFO("Done initializing likelihood field model with probabilities.");
-  }
-  else if(laser_model_type_ == LASER_MODEL_LIKELIHOOD_FIELD){
-    ROS_INFO("Initializing likelihood field model; this can take some time on large maps...");
-    laser_->SetModelLikelihoodField(z_hit_, z_rand_, sigma_hit_,
-                                    laser_likelihood_max_dist_);
-    ROS_INFO("Done initializing likelihood field model.");
-  }
-
-  odom_frame_id_ = config.odom_frame_id;
-  base_frame_id_ = config.base_frame_id;
-  global_frame_id_ = config.global_frame_id;
-
-  delete laser_scan_filter_;
-  laser_scan_filter_ = 
-          new tf::MessageFilter<sensor_msgs::msg::LaserScan>(*laser_scan_sub_, 
-                                                        *tf_, 
-                                                        odom_frame_id_, 
-                                                        100);
-  laser_scan_filter_->registerCallback(std::bind(&AmclNode::laserReceived,
-                                                   this, _1));
-
-  initial_pose_sub_ = nh_.subscribe("initialpose", 2, &AmclNode::initialPoseReceived, this);
-}
-*/
-
-
-/*
-void AmclNode::runFromBag(const std::string &in_bag_fn)
-{
-  rosbag::Bag bag;
-  bag.open(in_bag_fn, rosbag::bagmode::Read);
-  std::vector<std::string> topics;
-  topics.push_back(std::string("tf"));
-  std::string scan_topic_name = "base_scan"; // TODO determine what topic this actually is from ROS
-  topics.push_back(scan_topic_name);
-  rosbag::View view(bag, rosbag::TopicQuery(topics));
-
-  ros::Publisher laser_pub = nh_.advertise<sensor_msgs::msg::LaserScan>(scan_topic_name, 100);
-  ros::Publisher tf_pub = nh_.advertise<tf2_msgs::TFMessage>("/tf", 100);
-
-  // Sleep for a second to let all subscribers connect
-  ros::WallDuration(1.0).sleep();
-
-  ros::WallTime start(ros::WallTime::now());
-
-  // Wait for map
-  while (ros::ok())
-  {
-    {
-      std::lock_guard<std::recursive_mutex> cfl(configuration_mutex_);
-      if (map_)
-      {
-        ROS_INFO("Map is ready");
-        break;
-      }
-    }
-    ROS_INFO("Waiting for map...");
-    ros::getGlobalCallbackQueue()->callAvailable(ros::WallDuration(1.0));
-  }
-
-  BOOST_FOREACH(rosbag::MessageInstance const msg, view)
-  {
-    if (!ros::ok())
-    {
-      break;
-    }
-
-    // Process any ros messages or callbacks at this point
-    ros::getGlobalCallbackQueue()->callAvailable(ros::WallDuration());
-
-    tf2_msgs::TFMessage::ConstPtr tf_msg = msg->instantiate<tf2_msgs::TFMessage>();
-    if (tf_msg != NULL)
-    {
-      tf_pub.publish(msg);
-      for (size_t ii=0; ii<tf_msg->transforms.size(); ++ii)
-      {
-        tf_->getBuffer().setTransform(tf_msg->transforms[ii], "rosbag_authority");
-      }
-      continue;
-    }
-
-    sensor_msgs::msg::LaserScan::::ConstPtr base_scan = msg->instantiate<sensor_msgs::msg::LaserScan>();
-    if (base_scan != NULL)
-    {
-      laser_pub.publish(msg);
-      laser_scan_filter_->add(base_scan);
-      if (bag_scan_period_ > ros::WallDuration(0))
-      {
-        bag_scan_period_.sleep();
-      }
-      continue;
-    }
-
-    // ROS_WARN_STREAM("Unsupported message type" << msg->getTopic());
-  }
-
-  bag.close();
-
-  double runtime = (ros::WallTime::now() - start).toSec();
-  ROS_INFO("Bag complete, took %.1f seconds to process, shutting down", runtime);
-
-  const geometry_msgs::msg::Quaternion & q(last_published_pose.pose.pose.orientation);
-  double yaw, pitch, roll;
-  tf::Matrix3x3(tf::Quaternion(q.x, q.y, q.z, q.w)).getEulerYPR(yaw,pitch,roll);
-  ROS_INFO("Final location %.3f, %.3f, %.3f with stamp=%f",
-            last_published_pose.pose.pose.position.x,
-            last_published_pose.pose.pose.position.y,
-            yaw, last_published_pose.header.stamp.toSec()
-            );
-
-  ros::shutdown();
-}
-*/
-
-
+//这个函数干了个啥？把初始化的位置参数给改了？改成了当前参数
 void AmclNode::savePoseToServer()
 {
   // We need to apply the last transform to the latest odom pose to get
@@ -803,7 +563,7 @@ void AmclNode::savePoseToServer()
     ROS_ERROR("Failed to set parameter: %s", set_parameters_results.reason.c_str());
   }
 }
-
+//从server端更新位置姿态，上一个函数上传的位置姿态就在这里更新了
 void AmclNode::updatePoseFromServer()
 {
   init_pose_[0] = 0.0;
@@ -845,7 +605,7 @@ void AmclNode::updatePoseFromServer()
   else
     ROS_WARN("ignoring NAN in initial covariance AA");
 }
-
+//定时回调函数，检测激光数据
 void 
 AmclNode::checkLaserReceived()
 {
@@ -858,7 +618,7 @@ AmclNode::checkLaserReceived()
              scan_topic_.c_str());
   }
 }
-
+//不订阅地图话题时候调用这个函数
 void
 AmclNode::requestMap()
 {
@@ -897,7 +657,7 @@ AmclNode::requestMap()
   }
   handleMapMessage( resp->map );
 }
-
+//这是topic收到地图的
 void
 AmclNode::mapReceived(const std::shared_ptr<nav_msgs::msg::OccupancyGrid> msg)
 {
@@ -909,7 +669,7 @@ AmclNode::mapReceived(const std::shared_ptr<nav_msgs::msg::OccupancyGrid> msg)
 
   first_map_received_ = true;
 }
-
+//处理收到的地图
 void
 AmclNode::handleMapMessage(const nav_msgs::msg::OccupancyGrid& msg)
 {
@@ -1051,7 +811,7 @@ AmclNode::~AmclNode()
   delete tfl_;
   // TODO: delete everything allocated in constructor
 }
-
+//获取里程计的tf，可以看出amcl压根没有订阅odom的话题，而是直接从tf中拿到odom
 bool
 AmclNode::getOdomPose(tf2::Stamped<tf2::Transform>& odom_pose,
                       double& x, double& y, double& yaw,
@@ -1165,7 +925,7 @@ AmclNode::setMapCallback(const std::shared_ptr<nav_msgs::srv::SetMap::Request> r
   handleInitialPoseMessage(req->initial_pose);
   res->success = true;
 }
-
+//这里是激光数据处理，要将双激光雷达加进去，最核心是要把
 void
 AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser_scan)
 {
@@ -1177,8 +937,9 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
   int laser_index = -1;
 
   // Do we have the base->base_laser Tx yet?
+  //copy laser frame
   std::string laser_scan_frame_id = laser_scan->header.frame_id;
-  if(frame_to_laser_.find(laser_scan_frame_id) == frame_to_laser_.end())
+  if(frame_to_laser_.find(requestMap) == frame_to_laser_.end())
   {
     ROS_DEBUG("Setting up laser %d (frame_id=%s)", (int)frame_to_laser_.size(), laser_scan_frame_id.c_str());
     lasers_.push_back(new AMCLLaser(*laser_));

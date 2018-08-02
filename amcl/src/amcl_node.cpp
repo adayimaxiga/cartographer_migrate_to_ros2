@@ -151,8 +151,9 @@ class AmclNode
 
     int process();
     void savePoseToServer();
+    AMCLLaserData ldata_2_;             //Save and wait to send to pf al
 
-  private:
+private:
     tf2_ros::TransformBroadcaster* tfb_;
 
     tf2_ros::Buffer* tf2_buffer_;
@@ -248,6 +249,7 @@ class AmclNode
 
     AMCLOdom* odom_;
     AMCLLaser* laser_;
+    AMCLLaser* laser_2;
 
     tf2::Duration cloud_pub_interval;
     tf2::TimePoint last_cloud_pub_time;
@@ -931,6 +933,9 @@ AmclNode::setMapCallback(const std::shared_ptr<nav_msgs::srv::SetMap::Request> r
   handleInitialPoseMessage(req->initial_pose);
   res->success = true;
 }
+
+
+
 //接收另一个scan topic
 void
 AmclNode::laserReceived_2(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser_scan_2) {
@@ -947,7 +952,7 @@ AmclNode::laserReceived_2(const std::shared_ptr<sensor_msgs::msg::LaserScan> las
     if(frame_to_laser_2.find(laser_scan_frame_id) == frame_to_laser_2.end())
     {
         ROS_DEBUG("Setting up laser_2 %d (frame_id=%s)", (int)frame_to_laser_2.size(), laser_scan_frame_id.c_str());
-        lasers_2.push_back(new AMCLLaser( *lasers_2 ));
+        lasers_2.push_back(new AMCLLaser( *laser_2 ));
         lasers_update_2.push_back(true);
         laser_index = frame_to_laser_2.size();
 
@@ -990,9 +995,10 @@ AmclNode::laserReceived_2(const std::shared_ptr<sensor_msgs::msg::LaserScan> las
     }
     //接下来不做区分，将所有laser数据备份
 
-    AMCLLaserData ldata;
-    ldata.sensor = lasers_[laser_index];
-    ldata.range_count = laser_scan_2->ranges.size();
+    delete[] ldata_2_.ranges;
+    //坐标系在这里传递
+    ldata_2_.sensor = lasers_[laser_index];
+    ldata_2_.range_count = laser_scan_2->ranges.size();
     //这里把扫描点数目给存了下来。
     // To account for lasers that are mounted upside-down, we determine the
     // min, max, and increment angles of the laser in the base frame.
@@ -1034,34 +1040,37 @@ AmclNode::laserReceived_2(const std::shared_ptr<sensor_msgs::msg::LaserScan> las
     // Apply range min/max thresholds, if the user supplied them
     //看这个有没有预先设定
     if(laser_max_range_ > 0.0)
-        ldata.range_max = std::min(laser_scan_2->range_max, (float)laser_max_range_);
+        ldata_2_.range_max = std::min(laser_scan_2->range_max, (float)laser_max_range_);
     else
-        ldata.range_max = laser_scan_2->range_max;
+        ldata_2_.range_max = laser_scan_2->range_max;
     double range_min;
     if(laser_min_range_ > 0.0)
         range_min = std::max(laser_scan_2->range_min, (float)laser_min_range_);
     else
         range_min = laser_scan_2->range_min;
     // The AMCLLaserData destructor will free this memory
-    ldata.ranges = new double[ldata.range_count][2];
+    ldata_2_.ranges = new double[ldata_2_.range_count][2];
     // ROS_ASSERT(ldata.ranges);
-    for(int i=0;i<ldata.range_count;i++)
+    for(int i=0;i<ldata_2_.range_count;i++)
     {
         //amcl无法处理最小值问题，因此转化为最大值
         // amcl doesn't (yet) have a concept of min range.  So we'll map short
         // readings to max range.
         if(laser_scan_2->ranges[i] <= range_min)
-            ldata.ranges[i][0] = ldata.range_max;
+            ldata_2_.ranges[i][0] = ldata_2_.range_max;
         else
-            ldata.ranges[i][0] = laser_scan_2->ranges[i];
+            ldata_2_.ranges[i][0] = laser_scan_2->ranges[i];
         // Compute bearing
-        ldata.ranges[i][1] = angle_min +
+        ldata_2_.ranges[i][1] = angle_min +
                              (i * angle_increment);
     }
 
 
 }
-
+AMCLLaserData * getSecondLaserData(void)
+{
+    return &(amcl_node_ptr->ldata_2_);
+}
 //这里是激光数据处理，要将双激光雷达加进去，最核心是要把
 void
 AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser_scan)
@@ -1082,6 +1091,7 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
       //当前有多少tf（激光雷达）。
     ROS_DEBUG("Setting up laser %d (frame_id=%s)", (int)frame_to_laser_.size(), laser_scan_frame_id.c_str());
     lasers_.push_back(new AMCLLaser(*laser_));
+
     lasers_update_.push_back(true);
     laser_index = frame_to_laser_.size();
 
@@ -1206,6 +1216,7 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
   if(lasers_update_[laser_index])
   {
     AMCLLaserData ldata;
+      //坐标系在这里传递
     ldata.sensor = lasers_[laser_index];
     ldata.range_count = laser_scan->ranges.size();
     //这里把扫描点数目给存了下来。

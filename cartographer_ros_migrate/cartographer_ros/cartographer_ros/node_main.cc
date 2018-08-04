@@ -53,14 +53,21 @@ void Run() {
   constexpr double kTfBufferCacheTimeInSeconds = 1e6;
   tf2_ros::Buffer tf_buffer{::tf2::durationFromSec(kTfBufferCacheTimeInSeconds)};
   tf2_ros::TransformListener tf(tf_buffer);
+  //节点配置选项
   NodeOptions node_options;
+  //轨迹优化选项
   TrajectoryOptions trajectory_options;
+  //这里将lua文件读取回来，放在这两个类里面
   std::tie(node_options, trajectory_options) =
       LoadOptions(FLAGS_configuration_directory, FLAGS_configuration_basename);
-
+  //创建了一个cartographer::mapping::MapBuilder类型的指针我去翻这个地方,调用构造函数
   auto map_builder =
       ::cartographer::common::make_unique<cartographer::mapping::MapBuilder>(
           node_options.map_builder_options);
+  //这个map_builder不是想象的那么简单，他影响到后面sensorbridge类型，最终影响算法跑哪个。
+
+
+  //进入node构造函数，所有代码从这里开始
   Node node(node_options, std::move(map_builder), &tf_buffer,
             FLAGS_collect_metrics);
   if (!FLAGS_load_state_filename.empty()) {
@@ -84,6 +91,9 @@ void Run() {
 }  // namespace
 }  // namespace cartographer_ros
 
+
+
+//代码入口，
 int main(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
@@ -96,6 +106,8 @@ int main(int argc, char** argv) {
   ::rclcpp::init(argc, argv);
 
   cartographer_ros::ScopedRosLogSink ros_log_sink;
+  //前面都是日志
   cartographer_ros::Run();
   ::rclcpp::shutdown();
 }
+

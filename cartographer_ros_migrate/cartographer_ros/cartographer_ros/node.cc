@@ -99,6 +99,7 @@ cartographer_ros_msgs::msg::SensorTopics DefaultSensorTopics() {
 
 // Subscribes to the 'topic' for 'trajectory_id' using the 'node_handle' and
 // calls 'handler' on the 'node' to handle messages. Returns the subscriber.
+//封装的批量创建订阅的模式
 template <typename MessageType>
 ::rclcpp::SubscriptionBase::SharedPtr SubscribeWithHandler(
     void (Node::*handler)(int, const std::string&,
@@ -108,6 +109,7 @@ template <typename MessageType>
     rmw_qos_profile_t custom_qos_profile) {
   return node_handle->create_subscription<MessageType>(
       topic,
+      //这里是个lamda表达式，【这里是引用外部变量】（这里是）{这里是函数实际内容}
       [node, handler, trajectory_id, topic](const typename MessageType::ConstSharedPtr msg) {
             (node->*handler)(trajectory_id, topic, msg);
       },
@@ -129,7 +131,9 @@ Node::Node(
     : node_options_(node_options),
       resolution_(FLAGS_resolution),
       map_builder_bridge_(node_options_, std::move(map_builder), tf_buffer) {
-  carto::common::MutexLocker lock(&mutex_);
+  carto::common::MutexLocker lock(&mutex_);       //保护变量
+
+  //这玩意干啥的？？？
   if (collect_metrics) {
     metrics_registry_ = carto::common::make_unique<metrics::FamilyFactory>();
     carto::metrics::RegisterAllMetrics(metrics_registry_.get());
@@ -140,36 +144,31 @@ Node::Node(
   custom_qos_profile.depth = 50;
   custom_qos_profile.reliability = RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT;
   custom_qos_profile.history = RMW_QOS_POLICY_HISTORY_KEEP_LAST;
+  //创建节点。
   node_handle_ = rclcpp::Node::make_shared("cartographer_node");
 
 
-
+  //发布submap话题
   submap_list_publisher_ =
       node_handle_->create_publisher<::cartographer_ros_msgs::msg::SubmapList>(
           kSubmapListTopic, custom_qos_profile);
-  //submap_list_publisher_ =
-  //    node_handle_.advertise<::cartographer_ros_msgs::SubmapList>(
-  //        kSubmapListTopic, kLatestOnlyPublisherQueueSize);
+  //发布trajectory话题
   trajectory_node_list_publisher_ =
       node_handle_->create_publisher<::visualization_msgs::msg::MarkerArray>(
           kTrajectoryNodeListTopic, custom_qos_profile);
-  //trajectory_node_list_publisher_ =
-  //    node_handle_.advertise<::visualization_msgs::MarkerArray>(
-  //        kTrajectoryNodeListTopic, kLatestOnlyPublisherQueueSize);
+
+  //发布landmark
   landmark_poses_list_publisher_ =
       node_handle_->create_publisher<::visualization_msgs::msg::MarkerArray>(
           kLandmarkPosesListTopic, custom_qos_profile);
-  //landmark_poses_list_publisher_ =
-  //    node_handle_.advertise<::visualization_msgs::MarkerArray>(
-  //        kLandmarkPosesListTopic, kLatestOnlyPublisherQueueSize);
+
+
   constraint_list_publisher_ =
       node_handle_->create_publisher<::visualization_msgs::msg::MarkerArray>(
           kConstraintListTopic, custom_qos_profile);
-  //constraint_list_publisher_ =
-  //    node_handle_.advertise<::visualization_msgs::MarkerArray>(
-  //        kConstraintListTopic, kLatestOnlyPublisherQueueSize);
-  
 
+
+  //各种server
   service_servers_.push_back(node_handle_->create_service<cartographer_ros_msgs::srv::SubmapQuery>(
       kSubmapQueryServiceName, std::bind(&Node::HandleSubmapQuery, this, std::placeholders::_1, std::placeholders::_2)));
   service_servers_.push_back(node_handle_->create_service<cartographer_ros_msgs::srv::StartTrajectory>(
@@ -182,38 +181,26 @@ Node::Node(
       kGetTrajectoryStatesServiceName, std::bind(&Node::HandleGetTrajectoryStates, this, std::placeholders::_1, std::placeholders::_2)));
   service_servers_.push_back(node_handle_->create_service<cartographer_ros_msgs::srv::ReadMetrics>(
       kReadMetricsServiceName, std::bind(&Node::HandleReadMetrics, this, std::placeholders::_1, std::placeholders::_2)));
-  //service_servers_.push_back(node_handle_.advertiseService(
-  //    kSubmapQueryServiceName, &Node::HandleSubmapQuery, this));
-  //service_servers_.push_back(node_handle_.advertiseService(
-  //    kStartTrajectoryServiceName, &Node::HandleStartTrajectory, this));
-  //service_servers_.push_back(node_handle_.advertiseService(
-  //    kFinishTrajectoryServiceName, &Node::HandleFinishTrajectory, this));
-  //service_servers_.push_back(node_handle_.advertiseService(
-  //    kWriteStateServiceName, &Node::HandleWriteState, this));
-  //service_servers_.push_back(node_handle_.advertiseService(
-  //    kGetTrajectoryStatesServiceName, &Node::HandleGetTrajectoryStates, this));
-  //service_servers_.push_back(node_handle_.advertiseService(
-  //    kReadMetricsServiceName, &Node::HandleReadMetrics, this));
+
+
+  //发布occupied grid map topic
   occupancy_grid_publisher_ =
       node_handle_->create_publisher<::nav_msgs::msg::OccupancyGrid>(
   kOccupancyGridTopic, custom_qos_profile);
 
-
+  //扫描匹配
   scan_matched_point_cloud_publisher_ =
       node_handle_->create_publisher<sensor_msgs::msg::PointCloud2>(
           kScanMatchedPointCloudTopic, custom_qos_profile);
-  //scan_matched_point_cloud_publisher_ =
-  //    node_handle_.advertise<sensor_msgs::PointCloud2>(
-  //        kScanMatchedPointCloudTopic, kLatestOnlyPublisherQueueSize);
+
+
+  //tf
   tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_handle_);
 
-
+  //定时器,submap多久发布
   wall_timers_.push_back(node_handle_->create_wall_timer(
     std::chrono::milliseconds(int(node_options_.submap_publish_period_sec * 1000)),
     std::bind(&Node::PublishSubmapList, this)));
-  //wall_timers_.push_back(node_handle_.createWallTimer(
-  //    ::ros::WallDuration(node_options_.submap_publish_period_sec),
-  //    &Node::PublishSubmapList, this));
 
   if (node_options_.pose_publish_period_sec > 0) {
     publish_local_trajectory_data_timer_ = node_handle_->create_wall_timer(
@@ -221,57 +208,42 @@ Node::Node(
         std::bind(&Node::PublishLocalTrajectoryData, this));
   }
 
-  //if (node_options_.pose_publish_period_sec > 0) {
-  //  publish_local_trajectory_data_timer_ = node_handle_.createTimer(
-  //      ::ros::Duration(node_options_.pose_publish_period_sec),
-  //      &Node::PublishLocalTrajectoryData, this);
-  //}
   wall_timers_.push_back(node_handle_->create_wall_timer(
     std::chrono::milliseconds(int(node_options_.trajectory_publish_period_sec * 1000)),
     std::bind(&Node::PublishTrajectoryNodeList, this)));
-  //wall_timers_.push_back(node_handle_.createWallTimer(
-  //    ::ros::WallDuration(node_options_.trajectory_publish_period_sec),
-  //    &Node::PublishTrajectoryNodeList, this));
+
   wall_timers_.push_back(node_handle_->create_wall_timer(
     std::chrono::milliseconds(int(node_options_.trajectory_publish_period_sec * 1000)),
     std::bind(&Node::PublishLandmarkPosesList, this)));
 
-  //wall_timers_.push_back(node_handle_.createWallTimer(
-  //    ::ros::WallDuration(node_options_.trajectory_publish_period_sec),
-  //    &Node::PublishLandmarkPosesList, this));
   wall_timers_.push_back(node_handle_->create_wall_timer(
     std::chrono::milliseconds(int(kConstraintPublishPeriodSec * 1000)),
     std::bind(&Node::PublishConstraintList, this)));
-  
-  //wall_timers_.push_back(node_handle_.createWallTimer(
-  //    ::ros::WallDuration(kConstraintPublishPeriodSec),
-  //    &Node::PublishConstraintList, this));
 
+  //定时发布地图
   wall_timers_.push_back(node_handle_->create_wall_timer(
     std::chrono::milliseconds(int(1 * 1000)),
     std::bind(&Node::DrawAndPublish, this)));
   
 
-
-
-
   ts_ = std::make_shared<rclcpp::TimeSource>(node_handle_);
   clock_ = std::make_shared<rclcpp::Clock>(RCL_ROS_TIME);
   ts_->attachClock(clock_);
 }
-
+//退出
 Node::~Node() { FinishAllTrajectories(); }
 
 ::rclcpp::Node::SharedPtr Node::node_handle() { return node_handle_; }
-
+//submapquery
 void Node::HandleSubmapQuery(
     const std::shared_ptr<::cartographer_ros_msgs::srv::SubmapQuery::Request> request,
     std::shared_ptr<::cartographer_ros_msgs::srv::SubmapQuery::Response> response) {
   carto::common::MutexLocker lock(&mutex_);
+  //这里处理submap
   map_builder_bridge_.HandleSubmapQuery(request, response);
   return;
 }
-
+//这里发布submap
 void Node::PublishSubmapList() {
   carto::common::MutexLocker lock(&mutex_);
   
@@ -557,7 +529,7 @@ Node::ComputeExpectedSensorIds(
   }
   return expected_topics;
 }
-
+//这里调用了创建subscribers
 int Node::AddTrajectory(const TrajectoryOptions& options,
                         const cartographer_ros_msgs::msg::SensorTopics& topics) {
   const std::set<cartographer::mapping::TrajectoryBuilderInterface::SensorId>
@@ -591,7 +563,7 @@ void Node::LaunchSubscribers(const TrajectoryOptions& options,
   custom_qos_profile.reliability = RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT;
   custom_qos_profile.durability = RMW_QOS_POLICY_DURABILITY_VOLATILE;
 
-  
+  //监听所有的laser
   for (const std::string& topic : ComputeRepeatedTopicNames(
            topics.laser_scan_topic, options.num_laser_scans)) {
     subscribers_[trajectory_id].push_back(
@@ -600,6 +572,7 @@ void Node::LaunchSubscribers(const TrajectoryOptions& options,
              this, custom_qos_profile),
          topic});
   }
+    //监听所有的multi_echo_laser
   for (const std::string& topic :
        ComputeRepeatedTopicNames(topics.multi_echo_laser_scan_topic,
                                  options.num_multi_echo_laser_scans)) {
@@ -609,6 +582,7 @@ void Node::LaunchSubscribers(const TrajectoryOptions& options,
              node_handle_, this,custom_qos_profile),
          topic});
   }
+    //监听所有的point_cloud
   for (const std::string& topic : ComputeRepeatedTopicNames(
            topics.point_cloud2_topic, options.num_point_clouds)) {
     subscribers_[trajectory_id].push_back(
@@ -617,7 +591,7 @@ void Node::LaunchSubscribers(const TrajectoryOptions& options,
              node_handle_, this,custom_qos_profile),
          topic});
   }
-
+    //IMU
   // For 2D SLAM, subscribe to the IMU if we expect it. For 3D SLAM, the IMU is
   // required.
   if (node_options_.map_builder_options.use_trajectory_builder_3d() ||
@@ -631,7 +605,7 @@ void Node::LaunchSubscribers(const TrajectoryOptions& options,
                                                 node_handle_, this, custom_qos_profile),
          topic});
   }
-
+    //IMU
   if (options.use_odometry) {
     std::string topic = topics.odometry_topic;
     subscribers_[trajectory_id].push_back(
@@ -748,7 +722,7 @@ cartographer_ros_msgs::msg::StatusResponse Node::FinishTrajectoryUnderLock(
   status_response.message = message;
   return status_response;
 }
-
+//创建subscribtion从这里进入
 void Node::HandleStartTrajectory(
     const std::shared_ptr<::cartographer_ros_msgs::srv::StartTrajectory::Request> request,
     std::shared_ptr<::cartographer_ros_msgs::srv::StartTrajectory::Response> response) {
@@ -815,6 +789,7 @@ int Node::AddOfflineTrajectory(
 void Node::HandleGetTrajectoryStates(
     const std::shared_ptr<::cartographer_ros_msgs::srv::GetTrajectoryStates::Request> request,
     std::shared_ptr<::cartographer_ros_msgs::srv::GetTrajectoryStates::Response> response) {
+    (void)request;
   using TrajectoryState =
       ::cartographer::mapping::PoseGraphInterface::TrajectoryState;
   carto::common::MutexLocker lock(&mutex_);
@@ -870,6 +845,7 @@ void Node::HandleWriteState(
 void Node::HandleReadMetrics(
     const std::shared_ptr<::cartographer_ros_msgs::srv::ReadMetrics::Request> request,
     std::shared_ptr<::cartographer_ros_msgs::srv::ReadMetrics::Response> response) {
+    (void) request;
   carto::common::MutexLocker lock(&mutex_);
   response->timestamp = clock_->now();
   if (!metrics_registry_) {
@@ -919,6 +895,9 @@ void Node::RunFinalOptimization() {
   // can be performed without holding the mutex.
   map_builder_bridge_.RunFinalOptimization();
 }
+//看他怎么处理里程计数据的？
+//先给到了sensor_bridge里面的HandleOdometryMessage
+//可以看出所有传感器数据都给到sensor_bridge里面
 
 void Node::HandleOdometryMessage(const int trajectory_id,
                                  const std::string& sensor_id,
@@ -928,10 +907,12 @@ void Node::HandleOdometryMessage(const int trajectory_id,
     return;
   }
   auto sensor_bridge_ptr = map_builder_bridge_.sensor_bridge(trajectory_id);
+  //将里程计消息nav_msgs::msg::Odometry::ConstSharedPtr转换为cartographer里面的类型
   auto odometry_data_ptr = sensor_bridge_ptr->ToOdometryData(msg);
   if (odometry_data_ptr != nullptr) {
     extrapolators_.at(trajectory_id).AddOdometryData(*odometry_data_ptr);
   }
+  //里程计消息给到这个个地方处理
   sensor_bridge_ptr->HandleOdometryMessage(sensor_id, msg);
 }
 
@@ -971,7 +952,7 @@ void Node::HandleImuMessage(const int trajectory_id,
   }
   sensor_bridge_ptr->HandleImuMessage(sensor_id, msg);
 }
-
+//激光数据最终给到了sensor_bridge里面
 void Node::HandleLaserScanMessage(const int trajectory_id,
                                   const std::string& sensor_id,
                                   const sensor_msgs::msg::LaserScan::ConstSharedPtr msg) {
@@ -1016,36 +997,6 @@ void Node::LoadState(const std::string& state_filename,
   carto::common::MutexLocker lock(&mutex_);
   map_builder_bridge_.LoadState(state_filename, load_frozen_state);
 }
-/*
-void Node::MaybeWarnAboutTopicMismatch() {
-  ::ros::master::V_TopicInfo ros_topics;
-  ::ros::master::getTopics(ros_topics);
-  std::set<std::string> published_topics;
-  std::stringstream published_topics_string;
-  for (const auto& it : ros_topics) {
-    std::string resolved_topic = node_handle_.resolveName(it.name, false);
-    published_topics.insert(resolved_topic);
-    published_topics_string << resolved_topic << ",";
-  }
-  bool print_topics = false;
-  for (const auto& entry : subscribers_) {
-    int trajectory_id = entry.first;
-    for (const auto& subscriber : entry.second) {
-      std::string resolved_topic = node_handle_.resolveName(subscriber.topic);
-      if (published_topics.count(resolved_topic) == 0) {
-        LOG(WARNING) << "Expected topic \"" << subscriber.topic
-                     << "\" (trajectory " << trajectory_id << ")"
-                     << " (resolved topic \"" << resolved_topic << "\")"
-                     << " but no publisher is currently active.";
-        print_topics = true;
-      }
-    }
-  }
-  if (print_topics) {
-    LOG(WARNING) << "Currently available topics are: "
-                 << published_topics_string.str();
-  }
-}
-*/
+
 
 }  // namespace cartographer_ros

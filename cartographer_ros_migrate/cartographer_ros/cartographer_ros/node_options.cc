@@ -46,7 +46,7 @@ NodeOptions CreateNodeOptions(
   }
   return options;
 }
-
+//读取参数
 std::tuple<NodeOptions, TrajectoryOptions> LoadOptions(
     const std::string& configuration_directory,
     const std::string& configuration_basename) {

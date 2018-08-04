@@ -74,3 +74,10 @@ boost | ceres |protobuf 3.0.0 | cartographer
 阅读源码注释在源码中
 
 2018.8.1  LD
+
+
+##在ubuntu18.04或者ubuntu16.04上安装ros2-bouncy版本教程
+
+见InstallROS2.md
+
+2018.8.2  LD

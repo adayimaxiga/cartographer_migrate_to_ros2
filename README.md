@@ -99,7 +99,3 @@ boost | ceres |protobuf 3.0.0 | cartographer
 |修改激光接收部分为两个激光|2018.8.1|LD|编译成功|
 |修改amcl观测模型为两个激光|2018.8.2|LD|编译成功|
 |给cartographer写一部分注释|2018.8.4|LD|编译成功|
-
-
-## 删除cartographer文件中的.git，一起上传了
-2018.8.4  LD

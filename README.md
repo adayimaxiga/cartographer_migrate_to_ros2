@@ -1,6 +1,6 @@
 # ros2 环境下cartographer与amcl实现
 
-##主要功能
+## 主要功能
 主要实现双激光雷达在ros2环境下建图与定位。
 
 建图算法采用cartographer，移植到ros2环境
@@ -8,7 +8,7 @@
 定位算法用amcl，针对双激光雷达修改观测模型
 
 
-##cartographer部分
+## cartographer部分
 
 移植cartographer_ros 2018-07-20版本到ros2环境，cartographer_ros谷歌官方git地址https://github.com/googlecartographer/cartographer_ros.git
 
@@ -24,7 +24,7 @@
 boost | ceres |protobuf 3.0.0 | cartographer 
 
 
-###主要修改部分
+### 主要修改部分
 
 1.消息接口：比如一个标准的激光雷达扫描，在ros1中为sensor_msgs::Laserscan而在ros2中为sensor_msgs::msg::Laserscan。
 
@@ -44,7 +44,7 @@ boost | ceres |protobuf 3.0.0 | cartographer
 
 2018.07.26 LD
 
-##amcl部分
+## amcl部分
 
 这部分主要是要修改观测模型，首先阅读amcl源码：
 首先阅读amcl_node.cpp
@@ -76,11 +76,11 @@ boost | ceres |protobuf 3.0.0 | cartographer
 2018.8.1  LD
 
 
-##在ubuntu18.04或者ubuntu16.04上安装ros2-bouncy版本教程
+## 在ubuntu18.04或者ubuntu16.04上安装ros2-bouncy版本教程
 
 见InstallROS2.md
 
 2018.8.2  LD
 
-##删除cartographer文件中的.git，一起上传了
+## 删除cartographer文件中的.git，一起上传了
 2018.8.4  LD

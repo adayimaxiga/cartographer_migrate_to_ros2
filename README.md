@@ -81,3 +81,6 @@ boost | ceres |protobuf 3.0.0 | cartographer
 见InstallROS2.md
 
 2018.8.2  LD
+
+##删除cartographer文件中的.git，一起上传了
+2018.8.4  LD

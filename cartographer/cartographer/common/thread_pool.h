@@ -27,6 +27,17 @@
 #include "cartographer/common/mutex.h"
 #include "cartographer/common/task.h"
 
+
+/*  2018.8.6    LD
+ *
+ *  cartographer 源码阅读
+ *
+ *  本文件功能：
+ *
+ *  线程池，初始化一个线程数目固定的线程池
+ *  pool_就是线程池
+ *  */
+
 namespace cartographer {
 namespace common {
 

@@ -47,6 +47,7 @@ class RangeDataCollator {
   const std::set<std::string> expected_sensor_ids_;
   // Store at most one message for each sensor.
   std::map<std::string, sensor::TimedPointCloudData> id_to_pending_data_;
+  //min()会返回一个超级靠前的时间，大概是明朝。
   common::Time current_start_ = common::Time::min();
   common::Time current_end_ = common::Time::min();
 };

@@ -25,6 +25,21 @@
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
 
+
+/*  2018.8.6    LD
+ *
+ *  cartographer 源码阅读
+ *
+ *  本文件功能：
+ *
+ *  1. 实现浮点数四舍五入到整形。
+ *  2. 对字符串压缩。
+ *
+ *
+ *  */
+
+
+
 namespace cartographer {
 
 using int8 = int8_t;
@@ -38,6 +53,7 @@ using uint64 = uint64_t;
 
 namespace common {
 
+    //内联函数，实现浮点数四舍五入到整形。
 inline int RoundToInt(const float x) { return std::lround(x); }
 
 inline int RoundToInt(const double x) { return std::lround(x); }
@@ -56,7 +72,7 @@ inline void FastGzipString(const std::string& uncompressed,
                           reinterpret_cast<const char*>(uncompressed.data()),
                           uncompressed.size());
 }
-
+//对字符串压缩。
 inline void FastGunzipString(const std::string& compressed,
                              std::string* decompressed) {
   boost::iostreams::filtering_ostream out;

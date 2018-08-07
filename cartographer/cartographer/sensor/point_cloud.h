@@ -24,6 +24,20 @@
 #include "cartographer/transform/rigid_transform.h"
 #include "glog/logging.h"
 
+/*  2018.8.6    LD
+ *
+ *  cartographer 源码阅读
+ *
+ *  本文件功能：
+ *
+ *  传感器数据----点云处理   激光雷达数据就在这里处理了
+ *  三维坐标中大概是个坐标系。
+ *
+ *
+ *
+ *  */
+
+
 namespace cartographer {
 namespace sensor {
 

@@ -27,18 +27,48 @@
 #include "cartographer/common/math.h"
 #include "cartographer/common/port.h"
 
+
+/*  2018.8.6    LD
+ *
+ *  cartographer 源码阅读
+ *
+ *  本文件功能：
+ *
+ *  刚体转换
+ *
+ *
+ *  transformation:变换
+ *  translation:平移
+ *  rotation:旋转
+ *  scaling:缩放
+ *  counter clock wise rotation:逆时针旋转，counter：反向
+ *  Identity():单位矩阵,不同于线性代数的“单位”。在不同的语义下，含义会不同。
+ *  提供2个操作：
+ *  1，按照指定角度θ逆时针旋转。此时dx,dy=0
+ *  2，按照指定平移向量dx,dy平移. 此时θ=0
+ *  静态成员函数包括：
+ *  1,Rotation()
+ *  2,Translation()
+ *  3,Identity()
+ *
+ *  */
+
+
 namespace cartographer {
 namespace transform {
 
-template <typename FloatType>
+template <typename FloatType>     //浮点类型，我理解是float或double
 class Rigid2 {
  public:
   using Vector = Eigen::Matrix<FloatType, 2, 1>;
   using Rotation2D = Eigen::Rotation2D<FloatType>;
-
+//无参数构造函数，给一个0向量和一个单位矩阵。
+//Rotation2D::Identity里面直接给角度值了一个0.
   Rigid2() : translation_(Vector::Zero()), rotation_(Rotation2D::Identity()) {}
+  //双参数构造函数，给出平移向量和角度。
   Rigid2(const Vector& translation, const Rotation2D& rotation)
       : translation_(translation), rotation_(rotation) {}
+      //double类型的rotation
   Rigid2(const Vector& translation, const double rotation)
       : translation_(translation), rotation_(rotation) {}
 
@@ -53,7 +83,7 @@ class Rigid2 {
   static Rigid2 Translation(const Vector& vector) {
     return Rigid2(vector, Rotation2D::Identity());
   }
-
+//静态成员，全都是0
   static Rigid2<FloatType> Identity() { return Rigid2<FloatType>(); }
 
   template <typename OtherType>

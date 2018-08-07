@@ -24,9 +24,22 @@
 #include "cartographer/common/port.h"
 #include "ceres/ceres.h"
 
+/*  2018.8.6    LD
+ *
+ *  cartographer 源码阅读
+ *
+ *  本文件功能：
+ *
+ *  一些数学计算
+ *
+ *  */
+
+
 namespace cartographer {
 namespace common {
 
+
+    //截断函数
 // Clamps 'value' to be in the range ['min', 'max'].
 template <typename T>
 T Clamp(const T value, const T min, const T max) {
@@ -38,25 +51,25 @@ T Clamp(const T value, const T min, const T max) {
   }
   return value;
 }
-
+//计算乘方
 // Calculates 'base'^'exponent'.
 template <typename T>
 constexpr T Power(T base, int exponent) {
   return (exponent != 0) ? base * Power(base, exponent - 1) : T(1);
 }
-
+//求平方
 // Calculates a^2.
 template <typename T>
 constexpr T Pow2(T a) {
   return Power(a, 2);
 }
-
+//角度转弧度
 // Converts from degrees to radians.
 constexpr double DegToRad(double deg) { return M_PI * deg / 180.; }
-
+//弧度转角度
 // Converts form radians to degrees.
 constexpr double RadToDeg(double rad) { return 180. * rad / M_PI; }
-
+//角度差转换到-Pi到Pi区间。
 // Bring the 'difference' between two angles into [-pi; pi].
 template <typename T>
 T NormalizeAngleDifference(T difference) {
@@ -65,11 +78,16 @@ T NormalizeAngleDifference(T difference) {
   while (difference < -kPi) difference += 2. * kPi;
   return difference;
 }
-
+/*
+ * 求方位角 arctan
+ * */
 template <typename T>
 T atan2(const Eigen::Matrix<T, 2, 1>& vector) {
   return ceres::atan2(vector.y(), vector.x());
 }
+
+
+//四元数乘法？
 
 template <typename T>
 inline void QuaternionProduct(const double* const z, const T* const w,

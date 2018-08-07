@@ -26,6 +26,17 @@
 #include "cartographer/common/time.h"
 #include "glog/logging.h"
 
+/*  2018.8.6    LD
+ *
+ *  cartographer 源码阅读
+ *
+ *  本文件功能：
+ *
+ *  线程安全安全阻塞的队列
+ *
+ *  */
+
+
 namespace cartographer {
 namespace common {
 
@@ -36,6 +47,7 @@ class BlockingQueue {
  public:
   static constexpr size_t kInfiniteQueueSize = 0;
 
+  //这里初始化队列的大小，或者不限制大小。
   // Constructs a blocking queue with infinite queue size.
   BlockingQueue() : BlockingQueue(kInfiniteQueueSize) {}
 

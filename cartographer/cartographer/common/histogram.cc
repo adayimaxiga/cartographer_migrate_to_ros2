@@ -27,7 +27,7 @@ namespace cartographer {
 namespace common {
 
 void Histogram::Add(const float value) { values_.push_back(value); }
-
+//按字符串输出直方图。
 std::string Histogram::ToString(const int buckets) const {
   CHECK_GE(buckets, 1);
   if (values_.empty()) {

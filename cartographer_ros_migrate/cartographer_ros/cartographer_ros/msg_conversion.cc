@@ -155,6 +155,7 @@ float GetFirstEcho(const sensor_msgs::msg::LaserEcho& echo) {
 }
 
 // For sensor_msgs::LaserScan and sensor_msgs::MultiEchoLaserScan.
+//这里激光数据转换成cartographer数据laser格式，注意第四个数据时间。
 template <typename LaserMessageType>
 std::tuple<PointCloudWithIntensities, ::cartographer::common::Time>
 LaserScanToPointCloudWithIntensities(const LaserMessageType& msg) {
@@ -169,8 +170,11 @@ LaserScanToPointCloudWithIntensities(const LaserMessageType& msg) {
   float angle = msg.angle_min;
   for (size_t i = 0; i < msg.ranges.size(); ++i) {
     const auto& echoes = msg.ranges[i];
+    //这个if始终是1
     if (HasEcho(echoes)) {
+      //这里GetFirstEcho也是脱裤子放屁了。
       const float first_echo = GetFirstEcho(echoes);
+      //再次校验合法性
       if (msg.range_min <= first_echo && first_echo <= msg.range_max) {
         const Eigen::AngleAxisf rotation(angle, Eigen::Vector3f::UnitZ());
         Eigen::Vector4f point;
@@ -189,6 +193,7 @@ LaserScanToPointCloudWithIntensities(const LaserMessageType& msg) {
     }
     angle += msg.angle_increment;
   }
+  //上面大概就是把有效数据拷贝下来，啥都没干。不对，好像是转换到
   ::cartographer::common::Time timestamp = FromRos(msg.header.stamp);
   if (!point_cloud.points.empty()) {
     const double duration = point_cloud.points.back()[3];

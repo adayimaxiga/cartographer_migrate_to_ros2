@@ -25,6 +25,16 @@
 #include "cartographer/common/task.h"
 #include "glog/logging.h"
 
+
+/*  2018.8.6    LD
+ *
+ *  cartographer 源码阅读
+ *
+ *  本文件功能：
+ *
+ *  线程池，初始化一个线程数目固定的线程池
+ *
+ *  */
 namespace cartographer {
 namespace common {
 
@@ -37,10 +47,11 @@ void ThreadPoolInterface::SetThreadPool(Task* task) {
 ThreadPool::ThreadPool(int num_threads) {
   MutexLocker locker(&mutex_);
   for (int i = 0; i != num_threads; ++i) {
-    pool_.emplace_back([this]() { ThreadPool::DoWork(); });
+    pool_.emplace_back([this]() { ThreadPool::DoWork(); });//每个线程初始化执行DoWork，函数在下面
   }
 }
 
+//线程池为0时才能析构，否则check过不去
 ThreadPool::~ThreadPool() {
   {
     MutexLocker locker(&mutex_);
@@ -59,7 +70,9 @@ void ThreadPool::NotifyDependenciesCompleted(Task* task) {
   task_queue_.push_back(it->second);
   tasks_not_ready_.erase(it);
 }
-
+/*
+ * 让线程池执行 task函数。
+ * */
 std::weak_ptr<Task> ThreadPool::Schedule(std::unique_ptr<Task> task) {
   std::shared_ptr<Task> shared_task;
   {
@@ -72,7 +85,7 @@ std::weak_ptr<Task> ThreadPool::Schedule(std::unique_ptr<Task> task) {
   SetThreadPool(shared_task.get());
   return shared_task;
 }
-
+//每个线程执行这个函数
 void ThreadPool::DoWork() {
 #ifdef __linux__
   // This changes the per-thread nice level of the current thread on Linux. We
@@ -83,20 +96,23 @@ void ThreadPool::DoWork() {
   for (;;) {
     std::shared_ptr<Task> task;
     {
+      //加锁，同一时刻只能一个线程领取任务。
       MutexLocker locker(&mutex_);
       locker.Await([this]() REQUIRES(mutex_) {
         return !task_queue_.empty() || !running_;
+        //队列不为空或者没有运行。
       });
       if (!task_queue_.empty()) {
-        task = std::move(task_queue_.front());
-        task_queue_.pop_front();
+        task = std::move(task_queue_.front());  //领取任务
+        task_queue_.pop_front();                //删除。
       } else if (!running_) {
         return;
       }
+      //结束解锁。
     }
     CHECK(task);
     CHECK_EQ(task->GetState(), common::Task::DEPENDENCIES_COMPLETED);
-    Execute(task.get());
+    Execute(task.get());        //执行任务
   }
 }
 

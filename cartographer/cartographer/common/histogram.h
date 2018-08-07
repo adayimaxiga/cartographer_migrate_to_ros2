@@ -22,6 +22,18 @@
 
 #include "cartographer/common/port.h"
 
+
+/*  2018.8.6    LD
+ *
+ *  cartographer 源码阅读
+ *
+ *  本文件功能：
+ *
+ *  画直方图
+ *
+ *  */
+
+
 namespace cartographer {
 namespace common {
 

@@ -22,6 +22,9 @@
 #include "cartographer/transform/transform.h"
 #include "glog/logging.h"
 
+
+
+
 namespace cartographer {
 namespace mapping {
 
@@ -31,7 +34,7 @@ PoseExtrapolator::PoseExtrapolator(const common::Duration pose_queue_duration,
       gravity_time_constant_(imu_gravity_time_constant),
       cached_extrapolated_pose_{common::Time::min(),
                                 transform::Rigid3d::Identity()} {}
-
+//通过IMU初始化？这个函数只在trajectory3d中调用，因此二维不使用他，看下2d咋弄的
 std::unique_ptr<PoseExtrapolator> PoseExtrapolator::InitializeWithImu(
     const common::Duration pose_queue_duration,
     const double imu_gravity_time_constant, const sensor::ImuData& imu_data) {
@@ -50,7 +53,7 @@ std::unique_ptr<PoseExtrapolator> PoseExtrapolator::InitializeWithImu(
       transform::Rigid3d::Rotation(extrapolator->imu_tracker_->orientation()));
   return extrapolator;
 }
-
+//获取队列中最后一次位姿的时间。
 common::Time PoseExtrapolator::GetLastPoseTime() const {
   if (timed_pose_queue_.empty()) {
     return common::Time::min();
@@ -64,7 +67,7 @@ common::Time PoseExtrapolator::GetLastExtrapolatedTime() const {
   }
   return extrapolation_imu_tracker_->time();
 }
-
+//这应该是激光来做匹配的方法。每次得到最优估计，就加进来timed_pose_queue_。
 void PoseExtrapolator::AddPose(const common::Time time,
                                const transform::Rigid3d& pose) {
   if (imu_tracker_ == nullptr) {
@@ -80,9 +83,9 @@ void PoseExtrapolator::AddPose(const common::Time time,
          timed_pose_queue_[1].time <= time - pose_queue_duration_) {
     timed_pose_queue_.pop_front();
   }
-  UpdateVelocitiesFromPoses();
-  AdvanceImuTracker(time, imu_tracker_.get());
-  TrimImuData();
+  UpdateVelocitiesFromPoses();      //更新pose计算的速度
+  AdvanceImuTracker(time, imu_tracker_.get());//更新IMU
+  TrimImuData();    //删除老数据
   TrimOdometryData();
   odometry_imu_tracker_ = common::make_unique<ImuTracker>(*imu_tracker_);
   extrapolation_imu_tracker_ = common::make_unique<ImuTracker>(*imu_tracker_);
@@ -94,7 +97,7 @@ void PoseExtrapolator::AddImuData(const sensor::ImuData& imu_data) {
   imu_data_.push_back(imu_data);
   TrimImuData();
 }
-
+//里程计数据加进去
 void PoseExtrapolator::AddOdometryData(
     const sensor::OdometryData& odometry_data) {
   CHECK(timed_pose_queue_.empty() ||
@@ -130,7 +133,7 @@ void PoseExtrapolator::AddOdometryData(
       orientation_at_newest_odometry_time *
       linear_velocity_in_tracking_frame_at_newest_odometry_time;
 }
-
+//真正的位置姿态推测。
 transform::Rigid3d PoseExtrapolator::ExtrapolatePose(const common::Time time) {
   const TimedPose& newest_timed_pose = timed_pose_queue_.back();
   CHECK_GE(time, newest_timed_pose.time);
@@ -185,7 +188,7 @@ void PoseExtrapolator::TrimImuData() {
     imu_data_.pop_front();
   }
 }
-
+//删掉旧数据
 void PoseExtrapolator::TrimOdometryData() {
   while (odometry_data_.size() > 2 && !timed_pose_queue_.empty() &&
          odometry_data_[1].time <= timed_pose_queue_.back().time) {
@@ -223,7 +226,7 @@ void PoseExtrapolator::AdvanceImuTracker(const common::Time time,
   }
   imu_tracker->Advance(time);
 }
-
+//用陀螺仪做姿态推算。
 Eigen::Quaterniond PoseExtrapolator::ExtrapolateRotation(
     const common::Time time, ImuTracker* const imu_tracker) const {
   CHECK_GE(time, imu_tracker->time());
@@ -231,7 +234,7 @@ Eigen::Quaterniond PoseExtrapolator::ExtrapolateRotation(
   const Eigen::Quaterniond last_orientation = imu_tracker_->orientation();
   return last_orientation.inverse() * imu_tracker->orientation();
 }
-
+//用里程计来做transform推算。
 Eigen::Vector3d PoseExtrapolator::ExtrapolateTranslation(common::Time time) {
   const TimedPose& newest_timed_pose = timed_pose_queue_.back();
   const double extrapolation_delta =

@@ -22,6 +22,20 @@
 
 #include "cartographer/common/time.h"
 
+/*  2018.8.6    LD
+ *
+ *  cartographer 源码阅读
+ *
+ *  本文件功能：
+ *
+ *  互斥量
+ *
+ *  构造locker时对mutex上锁，析构解锁。
+ *
+ *  */
+
+
+
 namespace cartographer {
 namespace common {
 

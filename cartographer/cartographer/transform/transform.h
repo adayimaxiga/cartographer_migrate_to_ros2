@@ -25,11 +25,23 @@
 #include "cartographer/transform/proto/transform.pb.h"
 #include "cartographer/transform/rigid_transform.h"
 
+/*  2018.8.6    LD
+ *
+ *  cartographer 源码阅读
+ *
+ *  本文件功能：
+ *  各种坐标系变换
+ *
+ *
+ *  */
+
+
 namespace cartographer {
 namespace transform {
 
 // Returns the non-negative rotation angle in radians of the 3D transformation
 // 'transform'.
+//
 template <typename FloatType>
 FloatType GetAngle(const Rigid3<FloatType>& transform) {
   return FloatType(2) * std::atan2(transform.rotation().vec().norm(),
@@ -39,6 +51,7 @@ FloatType GetAngle(const Rigid3<FloatType>& transform) {
 // Returns the yaw component in radians of the given 3D 'rotation'. Assuming
 // 'rotation' is composed of three rotations around X, then Y, then Z, returns
 // the angle of the Z rotation.
+//返回yaw轴数据
 template <typename T>
 T GetYaw(const Eigen::Quaternion<T>& rotation) {
   const Eigen::Matrix<T, 3, 1> direction =

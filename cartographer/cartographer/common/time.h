@@ -23,15 +23,28 @@
 
 #include "cartographer/common/port.h"
 
+
+/*  2018.8.6    LD
+ *
+ *  cartographer 源码阅读
+ *
+ *  本文件功能：
+ *
+ *  时间转换，反正就是时间转换的种种，不是核心不仔细看了
+ *
+ *  */
+
 namespace cartographer {
 namespace common {
 
+
+//从0001年1月1日转换到1970年1月1日的秒
 constexpr int64 kUtsEpochOffsetFromUnixEpochInSeconds =
     (719162ll * 24ll * 60ll * 60ll);
 
 struct UniversalTimeScaleClock {
   using rep = int64;
-  using period = std::ratio<1, 10000000>;
+  using period = std::ratio<1, 10000000>;       //0.1us
   using duration = std::chrono::duration<rep, period>;
   using time_point = std::chrono::time_point<UniversalTimeScaleClock>;
   static constexpr bool is_steady = true;

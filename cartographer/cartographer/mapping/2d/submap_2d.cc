@@ -141,7 +141,10 @@ std::vector<std::shared_ptr<const Submap2D>> ActiveSubmaps2D::submaps() const {
   return std::vector<std::shared_ptr<const Submap2D>>(submaps_.begin(),
                                                       submaps_.end());
 }
-
+//这里把激光数据加入submap里面。
+//首先进行判断，如果submap为空或者已经达到最大激光数目，增加一个submap
+//这里注意，他第二个循环是在现有的所有submap里实现insertRangeData的方法。而当submap激光点数目达到2num的时候，这张子地图就建立完成了。
+//所以同时在建图的有两个submap
 std::vector<std::shared_ptr<const Submap2D>> ActiveSubmaps2D::InsertRangeData(
     const sensor::RangeData& range_data) {
   if (submaps_.empty() ||

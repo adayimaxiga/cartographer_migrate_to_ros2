@@ -35,7 +35,7 @@ PointCloud FilterByMaxRange(const PointCloud& point_cloud,
   }
   return result;
 }
-
+//二分法查找大于min_num点最少的一个cell
 PointCloud AdaptivelyVoxelFiltered(
     const proto::AdaptiveVoxelFilterOptions& options,
     const PointCloud& point_cloud) {
@@ -56,10 +56,12 @@ PointCloud AdaptivelyVoxelFiltered(
     float low_length = high_length / 2.f;
     result = VoxelFilter(low_length).Filter(point_cloud);
     if (result.size() >= options.min_num_points()) {
+      //这里二分法查找
       // Binary search to find the right amount of filtering. 'low_length' gave
       // a sufficiently dense 'result', 'high_length' did not. We stop when the
       // edge length is at most 10% off.
       while ((high_length - low_length) / low_length > 1e-1f) {
+        //这里high_length - low_length = low_length;  low_length = high_length / 2.f;
         const float mid_length = (low_length + high_length) / 2.f;
         const PointCloud candidate =
             VoxelFilter(mid_length).Filter(point_cloud);
@@ -129,7 +131,7 @@ Eigen::Array3i VoxelFilter::GetCellIndex(const Eigen::Vector3f& point) const {
                         common::RoundToInt(index.y()),
                         common::RoundToInt(index.z()));
 }
-
+//将体素滤波参数给进来
 proto::AdaptiveVoxelFilterOptions CreateAdaptiveVoxelFilterOptions(
     common::LuaParameterDictionary* const parameter_dictionary) {
   proto::AdaptiveVoxelFilterOptions options;

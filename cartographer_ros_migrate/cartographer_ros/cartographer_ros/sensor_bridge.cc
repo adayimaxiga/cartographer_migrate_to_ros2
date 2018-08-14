@@ -149,14 +149,15 @@ void SensorBridge::HandleImuMessage(const std::string& sensor_id,
                                imu_data->angular_velocity});
   }
 }
-//这里处理激光雷达数据，
+//这里处理激光雷达数据，这是收到激光原始数据的step 1
 void SensorBridge::HandleLaserScanMessage(
     const std::string& sensor_id, const sensor_msgs::msg::LaserScan::ConstSharedPtr& msg) {
   carto::sensor::PointCloudWithIntensities point_cloud;
   carto::common::Time time;
   //转换为点云数据。
   std::tie(point_cloud, time) = ToPointCloudWithIntensities(*msg);
-  //这里处理
+  //这里把msg解包给到time 和 point cloud里面，所以time就是整个数据包的time，point_cloud
+  // 这里处理
   HandleLaserScan(sensor_id, time, msg->header.frame_id, point_cloud);
 }
 
@@ -187,7 +188,7 @@ void SensorBridge::HandleLaserScan(
   if (points.points.empty()) {
     return;
   }
-  CHECK_LE(points.points.back()[3], 0);
+  CHECK_LE(points.points.back()[3], 0); //检测小于等于0，这里肯定是相等的。
   // TODO(gaschler): Use per-point time instead of subdivisions.
   for (int i = 0; i != num_subdivisions_per_laser_scan_; ++i) {     //注意这里出现了num_subdivisions_per_laser_scan_
     const size_t start_index =                                      //开始位置？
@@ -195,7 +196,7 @@ void SensorBridge::HandleLaserScan(
     const size_t end_index =
         points.points.size() * (i + 1) / num_subdivisions_per_laser_scan_;
     carto::sensor::TimedPointCloud subdivision(                                     //这个函数在分割吗？查下//构造函数 。。。不知道在干啥
-        points.points.begin() + start_index, points.points.begin() + end_index);
+        points.points.begin() + start_index, points.points.begin() + end_index);    //应该是把这么多点放进了subdivisions.
     //typedef std::vector<Eigen::Vector4f> TimedPointCloud;
     if (start_index == end_index) {
       continue;
@@ -223,7 +224,7 @@ void SensorBridge::HandleLaserScan(
     HandleRangefinder(sensor_id, subdivision_time, frame_id, subdivision);
   }
 }
-//所有的激光点入口
+//所有的激光点入口，分割后的激光点。
 void SensorBridge::HandleRangefinder(
     const std::string& sensor_id, const carto::common::Time time,
     const std::string& frame_id, const carto::sensor::TimedPointCloud& ranges) {

@@ -96,7 +96,7 @@ void PushAndResetLineMarker(visualization_msgs::msg::Marker* marker,
 }
 
 }  // namespace
-
+//这里构造map_builder,里面有pose_graph
 MapBuilderBridge::MapBuilderBridge(
     const NodeOptions& node_options,
     std::unique_ptr<cartographer::mapping::MapBuilderInterface> map_builder,
@@ -104,7 +104,7 @@ MapBuilderBridge::MapBuilderBridge(
     : node_options_(node_options),
       map_builder_(std::move(map_builder)),
       tf_buffer_(tf_buffer) {}
-
+//读取状态，应该是没调用。
 void MapBuilderBridge::LoadState(const std::string& state_filename,
                                  bool load_frozen_state) {
   // Check if suffix of the state file is ".pbstream".
@@ -118,7 +118,7 @@ void MapBuilderBridge::LoadState(const std::string& state_filename,
   cartographer::io::ProtoStreamReader stream(state_filename);
   map_builder_->LoadState(&stream, load_frozen_state);
 }
-
+//增加trajectory ，这个比较重要，里面有闭环检测，看下入口
 int MapBuilderBridge::AddTrajectory(
     const std::set<cartographer::mapping::TrajectoryBuilderInterface::SensorId>&
         expected_sensor_ids,
@@ -132,7 +132,7 @@ int MapBuilderBridge::AddTrajectory(
                  const ::cartographer::mapping::TrajectoryBuilderInterface::
                      InsertionResult>) {
         OnLocalSlamResult(trajectory_id, time, local_pose, range_data_in_local);
-      });
+      });//回调函数，返回local slam result
   LOG(INFO) << "Added trajectory with ID '" << trajectory_id << "'.";
 
   // Make sure there is no trajectory with 'trajectory_id' yet.
@@ -146,7 +146,7 @@ int MapBuilderBridge::AddTrajectory(
   auto emplace_result =
       trajectory_options_.emplace(trajectory_id, trajectory_options);
   CHECK(emplace_result.second == true);
-  return trajectory_id;
+  return trajectory_id;       //轨迹id一直是0
 }
 
 void MapBuilderBridge::FinishTrajectory(const int trajectory_id) {

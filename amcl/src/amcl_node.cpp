@@ -943,15 +943,17 @@ AmclNode::laserReceived_2(const std::shared_ptr<sensor_msgs::msg::LaserScan> las
     if( map_ == NULL ) {
         return;
     }
+
     //mutex
     std::lock_guard<std::recursive_mutex> lr2(configuration_mutex_);
     int laser_index = -1;
 
     std::string laser_scan_frame_id = laser_scan_2->header.frame_id;
-
+    ROS_INFO("receive laser 2 messege(frame_id=%s) ",laser_scan_frame_id);
     if(frame_to_laser_2.find(laser_scan_frame_id) == frame_to_laser_2.end())
     {
-        ROS_DEBUG("Setting up laser_2 %d (frame_id=%s)", (int)frame_to_laser_2.size(), laser_scan_frame_id.c_str());
+        ROS_INFO("find tf? laser2");
+        ROS_INFO("Setting up laser_2 %d (frame_id=%s)", (int)frame_to_laser_2.size(), laser_scan_frame_id.c_str());
         lasers_2.push_back(new AMCLLaser( *laser_2 ));
         lasers_update_2.push_back(true);
         laser_index = frame_to_laser_2.size();
@@ -960,11 +962,13 @@ AmclNode::laserReceived_2(const std::shared_ptr<sensor_msgs::msg::LaserScan> las
                                                            tf2::Vector3(0,0,0)),
                                             tf2::TimePoint(), laser_scan_frame_id);
         tf2::Stamped<tf2::Transform> laser_pose;
+        ROS_INFO("laser start to try to find tf2");
         try
         {
             geometry_msgs::msg::TransformStamped laser_pose_msg;
             this->tf2_buffer_->transform(tf2::toMsg<tf2::Stamped<tf2::Transform>, geometry_msgs::msg::TransformStamped>(ident), laser_pose_msg, base_frame_id_, tf2::durationFromSec(3.0));
             tf2::fromMsg(laser_pose_msg, laser_pose);
+            ROS_INFO("fing frame");
         }
         catch(tf2::TransformException& e)
         {
@@ -982,7 +986,7 @@ AmclNode::laserReceived_2(const std::shared_ptr<sensor_msgs::msg::LaserScan> las
         //获取到激光相对baselink的坐标
         lasers_2[laser_index]->SetLaserPose(laser_pose_v);
         //lasers存储本激光雷达各种信息。但是没有数据。
-        ROS_DEBUG("Received laser's pose wrt robot: %.3f %.3f %.3f",
+        ROS_INFO("Received laser's pose wrt robot: %.3f %.3f %.3f",
                   laser_pose_v.v[0],
                   laser_pose_v.v[1],
                   laser_pose_v.v[2]);
@@ -1085,11 +1089,13 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
   // Do we have the base->base_laser Tx yet?
   //copy laser frame
   std::string laser_scan_frame_id = laser_scan->header.frame_id;
+    ROS_INFO("receive laser 2 messege(frame_id=%s) ",laser_scan_frame_id);
   if(frame_to_laser_.find(laser_scan_frame_id) == frame_to_laser_.end())
   //没有找到这次laser的tf，即比如两个雷达，就都把他收进来了，所以我不用改了？
   {
+    ROS_INFO("find tf? laser1");
       //当前有多少tf（激光雷达）。
-    ROS_DEBUG("Setting up laser %d (frame_id=%s)", (int)frame_to_laser_.size(), laser_scan_frame_id.c_str());
+    ROS_INFO("Setting up laser %d (frame_id=%s)", (int)frame_to_laser_.size(), laser_scan_frame_id.c_str());
     lasers_.push_back(new AMCLLaser(*laser_));
 
     lasers_update_.push_back(true);
@@ -1108,7 +1114,7 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
     catch(tf2::TransformException& e)
     {
       ROS_ERROR("Couldn't transform from %s to %s, "
-                "even though the message notifier is in use",
+                "even though the message notifier is in use hhhhhhh",
                 laser_scan_frame_id.c_str(),
                 base_frame_id_.c_str());
       return;
@@ -1122,7 +1128,7 @@ AmclNode::laserReceived(const std::shared_ptr<sensor_msgs::msg::LaserScan> laser
     //获取到激光相对baselink的坐标
     lasers_[laser_index]->SetLaserPose(laser_pose_v);
     //lasers存储本激光雷达各种信息。但是没有数据。
-    ROS_DEBUG("Received laser's pose wrt robot: %.3f %.3f %.3f",
+      ROS_INFO("Received laser's pose wrt robot: %.3f %.3f %.3f",
               laser_pose_v.v[0],
               laser_pose_v.v[1],
               laser_pose_v.v[2]);

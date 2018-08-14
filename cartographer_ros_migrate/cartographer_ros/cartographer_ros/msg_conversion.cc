@@ -179,7 +179,7 @@ LaserScanToPointCloudWithIntensities(const LaserMessageType& msg) {
         const Eigen::AngleAxisf rotation(angle, Eigen::Vector3f::UnitZ());
         Eigen::Vector4f point;
         point << rotation * (first_echo * Eigen::Vector3f::UnitX()),
-            i * msg.time_increment;
+            i * msg.time_increment;             //这里time_increment = 0怎么办？
         point_cloud.points.push_back(point);
         if (msg.intensities.size() > 0) {
           CHECK_EQ(msg.intensities.size(), msg.ranges.size());
@@ -193,13 +193,14 @@ LaserScanToPointCloudWithIntensities(const LaserMessageType& msg) {
     }
     angle += msg.angle_increment;
   }
+  //到这里所有的time还都是increment里面的。比如time_increment=0,那每束激光都是0
   //上面大概就是把有效数据拷贝下来，啥都没干。不对，好像是转换到
-  ::cartographer::common::Time timestamp = FromRos(msg.header.stamp);
+  ::cartographer::common::Time timestamp = FromRos(msg.header.stamp); //这里获取数据包时间。
   if (!point_cloud.points.empty()) {
-    const double duration = point_cloud.points.back()[3];
-    timestamp += cartographer::common::FromSeconds(duration);
+    const double duration = point_cloud.points.back()[3];   //获取最后一个点的时间
+    timestamp += cartographer::common::FromSeconds(duration); //时间戳改为最后一个点接收时间。
     for (Eigen::Vector4f& point : point_cloud.points) {
-      point[3] -= duration;
+      point[3] -= duration;                                 //每一个点都减去duration，所有时间都是负值了。
     }
   }
   return std::make_tuple(point_cloud, timestamp);

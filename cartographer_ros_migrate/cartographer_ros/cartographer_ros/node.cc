@@ -84,7 +84,7 @@ DEFINE_string(occupancy_grid_topic, cartographer_ros::kOccupancyGridTopic,
 namespace cartographer_ros {
 
 namespace {
-
+//设置默认的话题
 cartographer_ros_msgs::msg::SensorTopics DefaultSensorTopics() {
   cartographer_ros_msgs::msg::SensorTopics topics;
   topics.laser_scan_topic = kLaserScanTopic;
@@ -247,7 +247,7 @@ void Node::HandleSubmapQuery(
 void Node::PublishSubmapList() {
   carto::common::MutexLocker lock(&mutex_);
   
-  LOG(INFO)<< "Submap receive";
+//  LOG(INFO)<< "Submap receive";
   cartographer_ros_msgs::msg::SubmapList msg=map_builder_bridge_.GetSubmapList(clock_);
   
   submap_list_publisher_->publish(msg);
@@ -328,7 +328,7 @@ void Node::PublishSubmapList() {
 
 
 }
-
+//画图
 void Node::DrawAndPublish() {
 //  LOG(INFO)<< "occu_timer";
   if (submap_slices_.empty() || last_frame_id_.empty()) {
@@ -341,7 +341,7 @@ void Node::DrawAndPublish() {
       painted_slices, resolution_, last_frame_id_, last_timestamp_);
   occupancy_grid_publisher_->publish(*msg_ptr);
 }
-
+//这个里把航迹推算加进来。
 void Node::AddExtrapolator(const int trajectory_id,
                            const TrajectoryOptions& options) {
   constexpr double kExtrapolationEstimationTimeSec = 0.001;  // 1 ms
@@ -358,7 +358,7 @@ void Node::AddExtrapolator(const int trajectory_id,
           ::cartographer::common::FromSeconds(kExtrapolationEstimationTimeSec),
           gravity_time_constant));
 }
-
+//采样设置。
 void Node::AddSensorSamplers(const int trajectory_id,
                              const TrajectoryOptions& options) {
   CHECK(sensor_samplers_.count(trajectory_id) == 0);
@@ -369,7 +369,7 @@ void Node::AddSensorSamplers(const int trajectory_id,
           options.fixed_frame_pose_sampling_ratio, options.imu_sampling_ratio,
           options.landmarks_sampling_ratio));
 }
-
+//发布局部规划
 void Node::PublishLocalTrajectoryData() {
   carto::common::MutexLocker lock(&mutex_);
   for (const auto& entry : map_builder_bridge_.GetLocalTrajectoryData()) {
@@ -483,7 +483,7 @@ void Node::PublishConstraintList() {
       map_builder_bridge_.GetConstraintList(clock_));
   }
 }
-
+//计算话题，比如多个laser
 std::set<cartographer::mapping::TrajectoryBuilderInterface::SensorId>
 Node::ComputeExpectedSensorIds(
     const TrajectoryOptions& options,
@@ -643,7 +643,7 @@ bool Node::ValidateTrajectoryOptions(const TrajectoryOptions& options) {
   }
   return false;
 }
-
+//判断合法性
 bool Node::ValidateTopicNames(
     const ::cartographer_ros_msgs::msg::SensorTopics& topics,
     const TrajectoryOptions& options) {
@@ -875,7 +875,7 @@ bool Node::FinishTrajectory(const int trajectory_id) {
   return FinishTrajectoryUnderLock(trajectory_id).code ==
          cartographer_ros_msgs::msg::StatusCode::OK;
 }
-
+//最终优化，退出时调用
 void Node::RunFinalOptimization() {
   {
     for (const auto& entry : map_builder_bridge_.GetTrajectoryStates()) {
@@ -953,6 +953,8 @@ void Node::HandleImuMessage(const int trajectory_id,
   sensor_bridge_ptr->HandleImuMessage(sensor_id, msg);
 }
 //激光数据最终给到了sensor_bridge里面
+//注意每个激光的时间是怎么给出来的
+//还有这个激光是咋给到闭环检测里面的。
 void Node::HandleLaserScanMessage(const int trajectory_id,
                                   const std::string& sensor_id,
                                   const sensor_msgs::msg::LaserScan::ConstSharedPtr msg) {
@@ -960,6 +962,7 @@ void Node::HandleLaserScanMessage(const int trajectory_id,
   if (!sensor_samplers_.at(trajectory_id).rangefinder_sampler.Pulse()) {
     return;
   }
+        LOG(INFO)<<"laser scan time incre"<< msg ->time_increment;
   map_builder_bridge_.sensor_bridge(trajectory_id)
       ->HandleLaserScanMessage(sensor_id, msg);
 }

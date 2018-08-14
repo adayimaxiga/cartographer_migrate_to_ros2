@@ -103,7 +103,7 @@ void ConstraintBuilder2D::MaybeAddConstraint(
       thread_pool_->Schedule(std::move(constraint_task));
   finish_node_task_->AddDependency(constraint_task_handle);
 }
-
+//添加全局边界
 void ConstraintBuilder2D::MaybeAddGlobalConstraint(
     const SubmapId& submap_id, const Submap2D* const submap,
     const NodeId& node_id, const TrajectoryNode::Data* const constant_data) {
@@ -176,7 +176,7 @@ ConstraintBuilder2D::DispatchScanMatcherConstruction(const SubmapId& submap_id,
       thread_pool_->Schedule(std::move(scan_matcher_task));
   return &submap_scan_matchers_.at(submap_id);
 }
-
+//找一下是哪里调用的这个函数，这就是GlobalSLAM的开始了
 void ConstraintBuilder2D::ComputeConstraint(
     const SubmapId& submap_id, const Submap2D* const submap,
     const NodeId& node_id, bool match_full_submap,
@@ -234,6 +234,7 @@ void ConstraintBuilder2D::ComputeConstraint(
   // effect that, in the absence of better information, we prefer the original
   // CSM estimate.
   ceres::Solver::Summary unused_summary;
+  //这里用的是论文里面brand and b 方法
   ceres_scan_matcher_.Match(pose_estimate.translation(), pose_estimate,
                             constant_data->filtered_gravity_aligned_point_cloud,
                             *submap_scan_matcher.grid, &pose_estimate,
@@ -244,8 +245,8 @@ void ConstraintBuilder2D::ComputeConstraint(
   constraint->reset(new Constraint{submap_id,
                                    node_id,
                                    {transform::Embed3D(constraint_transform),
-                                    options_.loop_closure_translation_weight(),
-                                    options_.loop_closure_rotation_weight()},
+                                    options_.loop_closure_translation_weight(),//注意这个权重到底是干啥的？
+                                    options_.loop_closure_rotation_weight()},//注意这个权重到底是干啥的？
                                    Constraint::INTER_SUBMAP});
 
   if (options_.log_matches()) {

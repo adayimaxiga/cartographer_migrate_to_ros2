@@ -206,7 +206,7 @@ bool FastCorrelativeScanMatcher2D::Match(
                                    point_cloud, min_score, score,
                                    pose_estimate);
 }
-
+//这里进匹配,与submap全局匹配
 bool FastCorrelativeScanMatcher2D::MatchFullSubmap(
     const sensor::PointCloud& point_cloud, float min_score, float* score,
     transform::Rigid2d* pose_estimate) const {
@@ -223,7 +223,7 @@ bool FastCorrelativeScanMatcher2D::MatchFullSubmap(
   return MatchWithSearchParameters(search_parameters, center, point_cloud,
                                    min_score, score, pose_estimate);
 }
-
+//这个函数调用的branchandBound
 bool FastCorrelativeScanMatcher2D::MatchWithSearchParameters(
     SearchParameters search_parameters,
     const transform::Rigid2d& initial_pose_estimate,

@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<robot xmlns:controller="http://playerstage.sourceforge.net/gazebo/xmlschema/#controller"
+  xmlns:interface="http://playerstage.sourceforge.net/gazebo/xmlschema/#interface"
+  xmlns:sensor="http://playerstage.sourceforge.net/gazebo/xmlschema/#sensor"
+  xmlns:xacro="http://ros.org/wiki/xacro"
+  name="sick_tim">
+  
+  <xacro:include filename="$(find robot_sim_demo)/urdf/sick_tim.urdf.xacro" />
+
+  <!-- Choose your laser -->
+  <!--<xacro:sick_tim571 name="laser" ros_topic="scan"   />-->
+  <xacro:rplidarA2 name="laser" ros_topic="scan"   />
+
+  <xacro:include filename="$(find robot_sim_demo)/urdf/materials.xacro" />
+  <xacro:include filename="$(find robot_sim_demo)/urdf/xbot-u.urdf.xacro" />
+  <xacro:include filename="$(find robot_sim_demo)/urdf/xbot-u.gazebo" />
+  <xacro:xbot2_base/>
+
+
+
+  
+</robot>

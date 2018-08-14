@@ -95,8 +95,10 @@ MapBuilder::MapBuilder(const proto::MapBuilderOptions& options)
         options.use_trajectory_builder_3d());
   if (options.use_trajectory_builder_2d()) {
     pose_graph_ = common::make_unique<PoseGraph2D>(
+            //这里调用PoseGraph2D构造函数。
         options_.pose_graph_options(),
         common::make_unique<optimization::OptimizationProblem2D>(
+                //优化问题
             options_.pose_graph_options().optimization_problem_options()),
         &thread_pool_);
   }

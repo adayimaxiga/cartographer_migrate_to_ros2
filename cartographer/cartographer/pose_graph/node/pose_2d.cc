@@ -25,7 +25,7 @@ constexpr size_t kYIndex = 1;
 constexpr size_t kRotationIndex = 2;
 
 }  // namespace
-
+//创建节点。
 Pose2D::Pose2D(const NodeId& node_id, bool constant,
                const Eigen::Vector2d& translation, double rotation)
     : Node(node_id, constant),

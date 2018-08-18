@@ -54,7 +54,7 @@ PoseGraph2D::~PoseGraph2D() {
   common::MutexLocker locker(&mutex_);
   CHECK(work_queue_ == nullptr);
 }
-
+//看看怎么初始化的，每次计算constraint的时先调用这里。
 std::vector<SubmapId> PoseGraph2D::InitializeGlobalSubmapPoses(
     const int trajectory_id, const common::Time time,
     const std::vector<std::shared_ptr<const Submap2D>>& insertion_submaps) {
@@ -132,20 +132,22 @@ NodeId PoseGraph2D::AppendNode(
   }
   return node_id;
 }
-
+//GlobalSLAM调用了这里
 NodeId PoseGraph2D::AddNode(
     std::shared_ptr<const TrajectoryNode::Data> constant_data,
     const int trajectory_id,
     const std::vector<std::shared_ptr<const Submap2D>>& insertion_submaps) {
   const transform::Rigid3d optimized_pose(
-      GetLocalToGlobalTransform(trajectory_id) * constant_data->local_pose);
-
+      GetLocalToGlobalTransform(trajectory_id) * constant_data->local_pose);//这里的local_pose就是pose_estimate，
+      //这里应该是把位置转换到了世界坐标系下。
+    //优化位置姿态？
   const NodeId node_id = AppendNode(constant_data, trajectory_id,
                                     insertion_submaps, optimized_pose);
   // We have to check this here, because it might have changed by the time we
   // execute the lambda.
   const bool newly_finished_submap = insertion_submaps.front()->finished();
-  AddWorkItem([=]() EXCLUDES(mutex_) {
+  AddWorkItem([=]() EXCLUDES(mutex_) {  //这应该是线程池里面处理的
+      //计算边界
     return ComputeConstraintsForNode(node_id, insertion_submaps,
                                      newly_finished_submap);
   });
@@ -237,11 +239,11 @@ void PoseGraph2D::AddLandmarkData(int trajectory_id,
     return WorkItem::Result::kDoNotRunOptimization;
   });
 }
-
+//计算边界？
 void PoseGraph2D::ComputeConstraint(const NodeId& node_id,
                                     const SubmapId& submap_id) {
   CHECK(data_.submap_data.at(submap_id).state == SubmapState::kFinished);
-
+  //对已经完成的地图进行边界计算
   const common::Time node_time = GetLatestNodeTime(node_id, submap_id);
   const common::Time last_connection_time =
       data_.trajectory_connectivity_state.LastConnectionTime(
@@ -267,7 +269,7 @@ void PoseGraph2D::ComputeConstraint(const NodeId& node_id,
         node_id, data_.trajectory_nodes.at(node_id).constant_data.get(),
         initial_relative_pose);
   } else if (global_localization_samplers_[node_id.trajectory_id]->Pulse()) {
-    constraint_builder_.MaybeAddGlobalConstraint(
+    constraint_builder_.MaybeAddGlobalConstraint(   //计算全局地图限制。
         submap_id,
         static_cast<const Submap2D*>(
             data_.submap_data.at(submap_id).submap.get()),
@@ -284,17 +286,18 @@ void PoseGraph2D::ComputeConstraintsForOldNodes(const SubmapId& submap_id) {
     }
   }
 }
-
+//计算边界？结束localSLAM后，addNode然后调用这里
 WorkItem::Result PoseGraph2D::ComputeConstraintsForNode(
     const NodeId& node_id,
-    std::vector<std::shared_ptr<const Submap2D>> insertion_submaps,
+    std::vector<std::shared_ptr<const Submap2D>> insertion_submaps,     //这里的submap是已经
     const bool newly_finished_submap) {
   common::MutexLocker locker(&mutex_);
   const auto& constant_data = data_.trajectory_nodes.at(node_id).constant_data;
   const std::vector<SubmapId> submap_ids = InitializeGlobalSubmapPoses(
       node_id.trajectory_id, constant_data->time, insertion_submaps);
+  //这里给出了submap的pose？
   CHECK_EQ(submap_ids.size(), insertion_submaps.size());
-  const SubmapId matching_id = submap_ids.front();
+  const SubmapId matching_id = submap_ids.front();  //给出最上面一个submap
   const transform::Rigid2d local_pose_2d = transform::Project2D(
       constant_data->local_pose *
       transform::Rigid3d::Rotation(constant_data->gravity_alignment.inverse()));
@@ -302,6 +305,7 @@ WorkItem::Result PoseGraph2D::ComputeConstraintsForNode(
       optimization_problem_->submap_data().at(matching_id).global_pose *
       constraints::ComputeSubmapPose(*insertion_submaps.front()).inverse() *
       local_pose_2d;
+  //这里把node加入到优化问题中。
   optimization_problem_->AddTrajectoryNode(
       matching_id.trajectory_id,
       optimization::NodeSpec2D{constant_data->time, local_pose_2d,
@@ -313,9 +317,9 @@ WorkItem::Result PoseGraph2D::ComputeConstraintsForNode(
     // only be marked as finished in 'data_.submap_data' further below.
     CHECK(data_.submap_data.at(submap_id).state == SubmapState::kActive);
     data_.submap_data.at(submap_id).node_ids.emplace(node_id);
-    const transform::Rigid2d constraint_transform =
-        constraints::ComputeSubmapPose(*insertion_submaps[i]).inverse() *
-        local_pose_2d;
+    const transform::Rigid2d constraint_transform =             //这里应该是循环计算了每一张submap的pose
+        constraints::ComputeSubmapPose(*insertion_submaps[i]).inverse() *   //这行计算出来相对位置？？？
+        local_pose_2d;//感觉这里得有bb算法了，sad ，没有，就单纯计算了变换
     data_.constraints.push_back(
         Constraint{submap_id,
                    node_id,
@@ -330,7 +334,7 @@ WorkItem::Result PoseGraph2D::ComputeConstraintsForNode(
   for (const auto& submap_id_data : data_.submap_data) {
     if (submap_id_data.data.state == SubmapState::kFinished) {
       CHECK_EQ(submap_id_data.data.node_ids.count(node_id), 0);
-      ComputeConstraint(node_id, submap_id_data.id);
+      ComputeConstraint(node_id, submap_id_data.id);            //每一张完成的地图计算
     }
   }
 
@@ -968,7 +972,7 @@ PoseGraph2D::GetAllSubmapPoses() const {
   }
   return submap_poses;
 }
-
+//计算
 transform::Rigid3d PoseGraph2D::ComputeLocalToGlobalTransform(
     const MapById<SubmapId, optimization::SubmapSpec2D>& global_submap_poses,
     const int trajectory_id) const {

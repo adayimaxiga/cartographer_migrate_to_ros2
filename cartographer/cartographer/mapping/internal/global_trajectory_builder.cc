@@ -48,7 +48,7 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
 
   GlobalTrajectoryBuilder(const GlobalTrajectoryBuilder&) = delete;
   GlobalTrajectoryBuilder& operator=(const GlobalTrajectoryBuilder&) = delete;
-
+//激光点真正的入口，每次激光判断是不是进行GlobalSLAm
   void AddSensorData(
       const std::string& sensor_id,
       const sensor::TimedPointCloudData& timed_point_cloud_data) override {
@@ -57,17 +57,25 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
     std::unique_ptr<typename LocalTrajectoryBuilder::MatchingResult>
         matching_result = local_trajectory_builder_->AddRangeData(
             sensor_id, timed_point_cloud_data);
+    //这里做local SLAM
     if (matching_result == nullptr) {
       // The range data has not been fully accumulated yet.
       return;
     }
-    kLocalSlamMatchingResults->Increment();
+    kLocalSlamMatchingResults->Increment();   //这是在干啥？？？
     std::unique_ptr<InsertionResult> insertion_result;
     if (matching_result->insertion_result != nullptr) {
       kLocalSlamInsertionResults->Increment();
       auto node_id = pose_graph_->AddNode(
           matching_result->insertion_result->constant_data, trajectory_id_,
-          matching_result->insertion_result->insertion_submaps);
+          matching_result->insertion_result->insertion_submaps);    //这里是加进去submap?
+          /*  这里数据结构：
+           *   struct InsertionResult {
+           *     std::shared_ptr<const TrajectoryNode::Data> constant_data;
+           *     std::vector<std::shared_ptr<const Submap2D>> insertion_submaps;
+           *     };
+           *
+           * */
       CHECK_EQ(node_id.trajectory_id, trajectory_id_);
       insertion_result = common::make_unique<InsertionResult>(InsertionResult{
           node_id, matching_result->insertion_result->constant_data,
@@ -82,7 +90,7 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
           std::move(insertion_result));
     }
   }
-
+  //IMU数据
   void AddSensorData(const std::string& sensor_id,
                      const sensor::ImuData& imu_data) override {
     if (local_trajectory_builder_) {

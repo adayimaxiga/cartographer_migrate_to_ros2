@@ -20,7 +20,7 @@
 namespace cartographer {
 namespace mapping {
 namespace {
-
+//初始化珊格最大与最小概率
 float MinCorrespondenceCostFromProto(const proto::Grid2D& proto) {
   if (proto.min_correspondence_cost() == 0.f &&
       proto.max_correspondence_cost() == 0.f) {
@@ -47,7 +47,7 @@ float MaxCorrespondenceCostFromProto(const proto::Grid2D& proto) {
   }
 }
 }  // namespace
-
+//获取2d配置
 proto::GridOptions2D CreateGridOptions2D(
     common::LuaParameterDictionary* const parameter_dictionary) {
   proto::GridOptions2D options;

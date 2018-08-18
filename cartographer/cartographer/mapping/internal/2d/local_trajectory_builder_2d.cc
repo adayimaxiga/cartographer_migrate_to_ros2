@@ -256,6 +256,7 @@ LocalTrajectoryBuilder2D::AddAccumulatedRangeData(
     kLocalSlamLatencyMetric->Set(common::ToSeconds(accumulation_duration));
   }
   last_accumulation_stop_ = accumulation_stop;
+  //这里把localSLAM结果return 给 GlobalSLAM，可以看到时间，位置估计，扫描数据，
   return common::make_unique<MatchingResult>(
       MatchingResult{time, pose_estimate, std::move(range_data_in_local),
                      std::move(insertion_result)});

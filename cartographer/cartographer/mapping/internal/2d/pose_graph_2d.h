@@ -252,6 +252,10 @@ class PoseGraph2D : public PoseGraph {
   std::vector<std::unique_ptr<PoseGraphTrimmer>> trimmers_ GUARDED_BY(mutex_);
 
   PoseGraphData data_ GUARDED_BY(mutex_);
+  //struct PoseGraphData {
+  //  Nodes nodes;
+  //  std::vector<std::unique_ptr<Constraint>> constraints;
+  //};
 
   ValueConversionTables conversion_tables_;
 

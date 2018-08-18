@@ -23,8 +23,8 @@
 
 namespace cartographer {
 namespace mapping {
-
-ProbabilityGrid::ProbabilityGrid(const MapLimits& limits,
+//概率珊格类型
+ProbabilityGrid::ProbabilityGrid(const MapLimits& limits,         //限制
                                  ValueConversionTables* conversion_tables)
     : Grid2D(limits, kMinCorrespondenceCost, kMaxCorrespondenceCost,
              conversion_tables),
@@ -38,6 +38,7 @@ ProbabilityGrid::ProbabilityGrid(const proto::Grid2D& proto,
 
 // Sets the probability of the cell at 'cell_index' to the given
 // 'probability'. Only allowed if the cell was unknown before.
+//设置珊格概率 一个一个来的。
 void ProbabilityGrid::SetProbability(const Eigen::Array2i& cell_index,
                                      const float probability) {
   uint16& cell =

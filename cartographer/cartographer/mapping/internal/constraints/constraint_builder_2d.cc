@@ -71,7 +71,7 @@ ConstraintBuilder2D::~ConstraintBuilder2D() {
   CHECK_EQ(num_started_nodes_, num_finished_nodes_);
   CHECK(when_done_ == nullptr);
 }
-
+//这里面每个节点都计算一次constraint
 void ConstraintBuilder2D::MaybeAddConstraint(
     const SubmapId& submap_id, const Submap2D* const submap,
     const NodeId& node_id, const TrajectoryNode::Data* const constant_data,
@@ -79,7 +79,7 @@ void ConstraintBuilder2D::MaybeAddConstraint(
   if (initial_relative_pose.translation().norm() >
       options_.max_constraint_distance()) {
     return;
-  }
+  }//这里当相对位置过大，就不计算constraint，默认15米
   if (!sampler_.Pulse()) return;
 
   common::MutexLocker locker(&mutex_);
@@ -90,7 +90,7 @@ void ConstraintBuilder2D::MaybeAddConstraint(
   constraints_.emplace_back();
   kQueueLengthMetric->Set(constraints_.size());
   auto* const constraint = &constraints_.back();
-  const auto* scan_matcher =
+  const auto* scan_matcher =            //构建一个扫描匹配工作，这里是分支定界算法。
       DispatchScanMatcherConstruction(submap_id, submap->grid());
   auto constraint_task = common::make_unique<common::Task>();
   constraint_task->SetWorkItem([=]() EXCLUDES(mutex_) {
@@ -103,7 +103,7 @@ void ConstraintBuilder2D::MaybeAddConstraint(
       thread_pool_->Schedule(std::move(constraint_task));
   finish_node_task_->AddDependency(constraint_task_handle);
 }
-//添加全局边界
+//添加全局边界？？？与上面有区别？？   //ComputeConstraint里面有一个选项区别，其他的区别不大
 void ConstraintBuilder2D::MaybeAddGlobalConstraint(
     const SubmapId& submap_id, const Submap2D* const submap,
     const NodeId& node_id, const TrajectoryNode::Data* const constant_data) {
@@ -155,11 +155,11 @@ void ConstraintBuilder2D::WhenDone(
   thread_pool_->Schedule(std::move(when_done_task_));
   when_done_task_ = common::make_unique<common::Task>();
 }
-
+//都调用了这个函数，他是干啥的？   //构建一个scanmatcher任务调度模型。
 const ConstraintBuilder2D::SubmapScanMatcher*
 ConstraintBuilder2D::DispatchScanMatcherConstruction(const SubmapId& submap_id,
                                                      const Grid2D* const grid) {
-  if (submap_scan_matchers_.count(submap_id) != 0) {
+  if (submap_scan_matchers_.count(submap_id) != 0) {   //？？？？
     return &submap_scan_matchers_.at(submap_id);
   }
   auto& submap_scan_matcher = submap_scan_matchers_[submap_id];
@@ -176,32 +176,33 @@ ConstraintBuilder2D::DispatchScanMatcherConstruction(const SubmapId& submap_id,
       thread_pool_->Schedule(std::move(scan_matcher_task));
   return &submap_scan_matchers_.at(submap_id);
 }
-//找一下是哪里调用的这个函数，这就是GlobalSLAM的开始了
+//找到了，这个函数就是计算边界了。
 void ConstraintBuilder2D::ComputeConstraint(
     const SubmapId& submap_id, const Submap2D* const submap,
-    const NodeId& node_id, bool match_full_submap,
+    const NodeId& node_id, bool match_full_submap,      //这一项区分全局地图和submap
     const TrajectoryNode::Data* const constant_data,
     const transform::Rigid2d& initial_relative_pose,
     const SubmapScanMatcher& submap_scan_matcher,
     std::unique_ptr<ConstraintBuilder2D::Constraint>* constraint) {
-  const transform::Rigid2d initial_pose =
+  const transform::Rigid2d initial_pose =       //这里计算个全局位置？？？
       ComputeSubmapPose(*submap) * initial_relative_pose;
-
+  //注意这里的注释
   // The 'constraint_transform' (submap i <- node j) is computed from:
   // - a 'filtered_gravity_aligned_point_cloud' in node j,
   // - the initial guess 'initial_pose' for (map <- node j),
   // - the result 'pose_estimate' of Match() (map <- node j).
   // - the ComputeSubmapPose() (map <- submap i)
   float score = 0.;
-  transform::Rigid2d pose_estimate = transform::Rigid2d::Identity();
+  transform::Rigid2d pose_estimate = transform::Rigid2d::Identity();    //给个0初始值
 
   // Compute 'pose_estimate' in three stages:
   // 1. Fast estimate using the fast correlative scan matcher.
   // 2. Prune if the score is too low.
   // 3. Refine.
+  //重新看了一遍，这里压根没有调用，猜测是在有多条trajectory时用
   if (match_full_submap) {
     kGlobalConstraintsSearchedMetric->Increment();
-    if (submap_scan_matcher.fast_correlative_scan_matcher->MatchFullSubmap(
+    if (submap_scan_matcher.fast_correlative_scan_matcher->MatchFullSubmap(//区别在这里
             constant_data->filtered_gravity_aligned_point_cloud,
             options_.global_localization_min_score(), &score, &pose_estimate)) {
       CHECK_GT(score, options_.global_localization_min_score());
